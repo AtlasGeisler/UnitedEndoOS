@@ -256,3 +256,30 @@ What changed:
 Verified: tsc clean, production build green, all seven smoke tests pass, the AI
 features still run on Claude, and screenshots show the Findings and Procedure
 tabs with the full vocabulary.
+
+## Mined AI prompt templates from the prototype (2026-06-09)
+
+The prototype's AI prompt templates were mined into a single server/prompts.ts
+module and wired into the live AI features.
+
+What changed:
+
+- The SOAP draft uses the expert-endodontist prompt with standard dental
+  abbreviations (RCT, SIP, SAP, EPT, GP, NaOCl, F/U) and a concise S, O, A, P
+  format, while still returning structured JSON for the cockpit.
+- The referral report uses the warm, collegial, 100 to 150 word thank-you-note
+  prompt.
+- The insurance narrative generator now calls the model with the seven section
+  pre-authorization and denial appeal prompts, weaving in carrier intelligence
+  (known denial reasons and required documentation) and redacting PHI first. On
+  Claude it produced a 2,600 character, seven section pre-auth narrative in
+  proper AAE terminology, audited with a Patient-{id} placeholder.
+- All mined templates, including the AI training assistant protocol prompt, are
+  seeded into the prompt manager so they are visible and editable in Admin, and
+  the standard SOAP and referral document templates are seeded too.
+- Fixed the seed delete order so a reseed over existing data clears invoice
+  children before invoices.
+
+Verified: tsc clean, build green, all seven smoke tests pass, the live narrative
+runs on Claude with carrier intelligence and PHI redaction, and the Admin prompt
+manager lists the six mined prompts.

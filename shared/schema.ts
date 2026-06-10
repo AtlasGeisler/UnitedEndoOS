@@ -499,6 +499,8 @@ export const insuranceNarratives = pgTable("insurance_narratives", {
   id: serial("id").primaryKey(),
   patientId: integer("patient_id").references(() => patients.id),
   kind: text("kind").notNull(),
+  carrierName: text("carrier_name"),
+  procedureCode: text("procedure_code"),
   body: text("body"),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),

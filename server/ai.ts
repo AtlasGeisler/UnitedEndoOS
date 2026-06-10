@@ -2,6 +2,7 @@ import { db } from "./db";
 import { aiAuditLogs, type Patient } from "../shared/schema";
 import { getProvider, isMock } from "./ai-providers";
 import { buildRedaction, redact, reinsert, redactObject } from "./phi-redaction";
+import { SOAP_SYSTEM, REFERRAL_SYSTEM } from "./prompts";
 
 // The AI feature layer. Every function redacts PHI before the provider call,
 // reinserts the patient name only after the model returns, and writes a row to
@@ -39,9 +40,7 @@ export async function generateSoapDraft(
   if (isMock()) {
     draft = mockSoap(patient.firstName, input);
   } else {
-    const system =
-      "You are an endodontic scribe. Draft a SOAP note from the structured findings. You assist, the clinician authors and signs. Never invent findings. Return JSON with keys subjective, objective, assessment, plan.";
-    const raw = await provider.chat(system, redactedPrompt);
+    const raw = await provider.chat(SOAP_SYSTEM, redactedPrompt);
     const restored = reinsert(raw, map);
     draft = parseSoap(restored) ?? mockSoap(patient.firstName, input);
   }
@@ -134,9 +133,7 @@ export async function generateReferralReport(
   if (isMock()) {
     body = mockReport(patient, input);
   } else {
-    const system =
-      "You are an endodontist writing a concise, professional referral report back to the referring general dentist. Summarize the completed treatment and the restorative recommendation. No em dashes.";
-    body = reinsert(await provider.chat(system, redactedPrompt), map) || mockReport(patient, input);
+    body = reinsert(await provider.chat(REFERRAL_SYSTEM, redactedPrompt), map) || mockReport(patient, input);
   }
 
   await db.insert(aiAuditLogs).values({

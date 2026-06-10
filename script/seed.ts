@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, client } from "../server/db";
+import { SEEDED_AI_PROMPTS, SEEDED_DOC_TEMPLATES } from "../server/prompts";
 import { hashPassword } from "../server/auth";
 import { storage } from "../server/storage";
 import { renderRadiograph, type RadiographType } from "./radiographs";
@@ -66,8 +67,10 @@ async function clearAll() {
   // Delete in dependency order. PGlite has no TRUNCATE CASCADE convenience here.
   const order = [
     s.imageAnnotations, s.imageComparisons, s.imageAssets, s.imageStudies,
-    s.mountInstances, s.messages, s.conversations, s.payments, s.invoiceItems,
-    s.invoices, s.claims, s.insuranceNarratives, s.referralReports, s.soapNotes,
+    s.mountInstances, s.messages, s.conversations,
+    // Children of invoices (payments, claims, items) must clear before invoices.
+    s.payments, s.claims, s.invoiceItems, s.invoices,
+    s.insuranceNarratives, s.referralReports, s.soapNotes,
     s.treatmentPlans, s.activityLogs, s.visits, s.appointments,
     s.reportDeliveryLog, s.referralStatusHistory, s.crmAlerts, s.touchpoints,
     s.referrals, s.patients, s.referringDentistClinics, s.referringDentists,
@@ -136,11 +139,9 @@ async function seed() {
   const catDx = await db.insert(s.configCategories).values({ key: "pulpal_diagnosis", label: "Pulpal Diagnosis" }).returning();
   await db.insert(s.configOptions).values(PULPAL.map((v, i) => ({ categoryId: catDx[0].id, value: v, label: v, sortOrder: i })));
 
-  await db.insert(s.aiPrompts).values([
-    { key: "soap_draft", label: "SOAP note draft", template: "Draft an endodontic SOAP note from the structured findings for Patient-{id}. Assist only, the provider authors and signs." },
-    { key: "referral_report", label: "Referral report", template: "Draft a referral report to the referring dentist for Patient-{id} summarizing the completed endodontic treatment." },
-    { key: "image_analysis", label: "Image analysis", template: "List advisory radiographic findings for the attached synthetic image. Provider review required." },
-  ]);
+  // The mined AI prompt templates, surfaced in the Admin prompt manager.
+  await db.insert(s.aiPrompts).values(SEEDED_AI_PROMPTS);
+  await db.insert(s.templates).values(SEEDED_DOC_TEMPLATES);
   await db.insert(s.aiPredictionWeights).values([
     { finding: "percussion", apicalDiagnosis: "Symptomatic apical periodontitis", weight: 1.4 },
     { finding: "cold", pulpalDiagnosis: "Reversible pulpitis", weight: 1.2 },

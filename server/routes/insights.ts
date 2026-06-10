@@ -3,13 +3,14 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { requireAuth } from "../auth";
 import { now } from "../clock";
-import { getProvider } from "../ai-providers";
-import { buildRedaction, redact } from "../phi-redaction";
+import { getProvider, isMock } from "../ai-providers";
+import { buildRedaction, redact, reinsert } from "../phi-redaction";
+import { PREAUTH_SYSTEM, APPEAL_SYSTEM } from "../prompts";
 import {
   visits, soapNotes, patients, claims, payments, referringDentists, appointments,
   appointmentTypes, staffProfiles, users, clinics, reportDeliveryLog, referralReports,
   configCategories, configOptions, aiPrompts, aiPredictionWeights, aiAuditLogs,
-  insuranceNarratives,
+  insuranceNarratives, carrierPatterns,
 } from "../../shared/schema";
 
 // Analytics, Performance, Operations, and Admin, plus insurance narratives and
@@ -115,18 +116,42 @@ export function registerInsightRoutes(app: Express) {
     res.json({ logs: rows });
   });
 
-  // Insurance narratives: a 7 section pre-authorization or denial appeal, PHI
-  // redacted before any AI call.
+  // Insurance narratives: a 7 section pre-authorization or denial appeal, using
+  // the mined prompts and carrier intelligence, PHI redacted before any AI call.
   app.post("/api/narratives", requireAuth, async (req, res) => {
     const { patientId, kind, toothNumber, procedure, denialReason } = req.body ?? {};
     const patient = await db.query.patients.findFirst({ where: eq(patients.id, Number(patientId)) });
     if (!patient || !req.user!.clinicIds.includes(patient.clinicId)) return res.status(404).json({ error: "Not found" });
     const map = buildRedaction(patient);
     const provider = getProvider();
-    const body = narrativeSections(kind, { tooth: toothNumber, procedure, denialReason, carrier: patient.insuranceCarrier });
-    const redactedPreview = redact(`Patient ${patient.firstName}, tooth ${toothNumber}`, map);
-    const [row] = await db.insert(insuranceNarratives).values({ patientId: patient.id, kind, body, createdBy: req.user!.id }).returning();
-    await db.insert(aiAuditLogs).values({ userId: req.user!.id, patientId: patient.id, feature: "narrative", provider: provider.name, redactedInput: { preview: redactedPreview, kind }, output: { length: body.length }, approved: null });
+
+    // Carrier intelligence: known denial patterns and the documentation a carrier
+    // wants, addressed proactively in the narrative.
+    const carrierRow = patient.insuranceCarrier
+      ? await db.query.carrierPatterns.findFirst({ where: eq(carrierPatterns.carrierName, patient.insuranceCarrier) })
+      : null;
+    const carrierTips = carrierRow
+      ? `${carrierRow.tips ?? ""} Common denial reasons: ${(carrierRow.commonDenialReasons ?? []).join(", ")}. Required documentation: ${(carrierRow.requiredDocumentation ?? []).join(", ")}.`
+      : "";
+
+    const userPrompt = redact([
+      `Patient ${patient.firstName} ${patient.lastName}, tooth ${toothNumber}.`,
+      patient.insuranceCarrier ? `Insurance carrier: ${patient.insuranceCarrier}.` : "",
+      procedure ? `Procedure: ${procedure}.` : "",
+      kind === "appeal" ? `Stated denial reason: ${denialReason ?? "not specified"}.` : "",
+      carrierTips ? `Carrier intelligence: ${carrierTips}` : "",
+    ].filter(Boolean).join("\n"), map);
+
+    let body: string;
+    if (isMock()) {
+      body = narrativeSections(kind, { tooth: toothNumber, procedure, denialReason, carrier: patient.insuranceCarrier });
+    } else {
+      const system = kind === "appeal" ? APPEAL_SYSTEM : PREAUTH_SYSTEM;
+      body = reinsert(await provider.chat(system, userPrompt), map) || narrativeSections(kind, { tooth: toothNumber, procedure, denialReason, carrier: patient.insuranceCarrier });
+    }
+
+    const [row] = await db.insert(insuranceNarratives).values({ patientId: patient.id, kind, carrierName: patient.insuranceCarrier, procedureCode: procedure ?? null, body, createdBy: req.user!.id }).returning();
+    await db.insert(aiAuditLogs).values({ userId: req.user!.id, patientId: patient.id, feature: "narrative", provider: provider.name, redactedInput: { prompt: userPrompt, kind }, output: { length: body.length }, approved: null });
     res.json({ narrative: row });
   });
 }
