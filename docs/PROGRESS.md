@@ -62,3 +62,43 @@ a production build, and screenshots. tsc clean.
 Next: Phase 2, the Visit Workspace clinical cockpit, annotations and measurements,
 compare mode, the AI SOAP draft with approval, AI image analysis, and referral
 report delivery.
+
+## Phase 2, the clinical cockpit and the AI features (2026-06-09)
+
+A provider can take a tooth from findings to a signed note and a delivered
+report, with the model assisting and a person authoring.
+
+What works:
+
+- The AI provider abstraction: Anthropic, OpenAI, and a deterministic offline
+  MockProvider chosen by environment, so every AI feature works with no key. PHI
+  redaction runs before every call, identifiers become a Patient-{id}
+  placeholder, and the real name is reinserted only after the model returns.
+  Every AI interaction is written to the AI audit log.
+- The Visit Workspace cockpit: left holds the AAE pulpal and apical diagnosis
+  pairs, the diagnostic tests, and the SOAP note. Center holds per canal
+  documentation (working length, reference, file size, obturation), the CDT
+  codes, and the required radiograph sequence as named slots. Right is the
+  Inspector. The filmstrip docks to the bottom filtered to the visit.
+- AI SOAP draft: one click composes a draft from the structured findings,
+  watermarked AI draft, provider review required. The provider edits and signs.
+- Sign and lock: signing locks the note, and a locked note rejects edits with a
+  409, accepting only addenda. Verified end to end.
+- AI image analysis: advisory findings render as numbered overlay pins on the
+  radiograph and as a list with confidence, each requiring explicit accept or
+  dismiss. Nothing alters the record on its own.
+- Referral report: generated from the visit, then approved and delivered to the
+  referring dentist over portal, fax, or email, with a delivery log row.
+- Annotations and measurements: a calibrated length measurement and points draw
+  as overlay geometry over the original and save through the annotations API.
+  Originals are never mutated.
+- Compare mode in Quick Look: two images side by side, or stacked with an opacity
+  swipe slider, sharing zoom and the window-level controls.
+
+Checkpoint passing: a full RCT visit taken from structured findings through an AI
+drafted and approved note to a delivered referral report. Verified by API checks,
+a production build, and screenshots showing the cockpit, the AI pins, and compare
+mode. tsc clean.
+
+Next: Phase 3, the Schedule with drag and drop, the Thanksgiving Rule engine with
+an injectable clock, the Today huddle, and Worklists.

@@ -4,6 +4,8 @@ import { AppShell } from "@/components/AppShell";
 import { Login } from "@/pages/Login";
 import { Patients } from "@/pages/Patients";
 import { PatientChart } from "@/pages/PatientChart";
+import { Clinical } from "@/pages/Clinical";
+import { VisitWorkspace } from "@/pages/VisitWorkspace";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { MODULES } from "@/modules";
 
@@ -101,7 +103,9 @@ export function App() {
         {/* Phase 1 real pages take precedence over the placeholder routes. */}
         <Route path="/patients" component={Patients} />
         <Route path="/patients/:id" component={PatientChart} />
-        {MODULES.filter((m) => m.key !== "patients").map((m) => {
+        <Route path="/clinical" component={Clinical} />
+        <Route path="/visits/:id" component={VisitWorkspace} />
+        {MODULES.filter((m) => m.key !== "patients" && m.key !== "clinical").map((m) => {
           const meta = MODULE_META[m.key];
           return (
             <Route key={m.key} path={m.path}>
