@@ -17,6 +17,11 @@ import { Billing } from "@/pages/Billing";
 import { Messages } from "@/pages/Messages";
 import { Kiosk } from "@/pages/Kiosk";
 import { PatientPortal } from "@/pages/PatientPortal";
+import { Analytics } from "@/pages/Analytics";
+import { Performance } from "@/pages/Performance";
+import { Operations } from "@/pages/Operations";
+import { Admin } from "@/pages/Admin";
+import { Shortcuts } from "@/pages/Shortcuts";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { MODULES } from "@/modules";
 
@@ -130,7 +135,12 @@ export function App() {
         <Route path="/plans" component={Plans} />
         <Route path="/billing" component={Billing} />
         <Route path="/messages" component={Messages} />
-        {MODULES.filter((m) => !["patients", "clinical", "today", "schedule", "worklists", "referrals", "referring", "plans", "billing", "messages"].includes(m.key)).map((m) => {
+        <Route path="/analytics" component={Analytics} />
+        <Route path="/performance" component={Performance} />
+        <Route path="/operations" component={Operations} />
+        <Route path="/admin" component={Admin} />
+        <Route path="/shortcuts" component={Shortcuts} />
+        {MODULES.filter((m) => !["patients", "clinical", "today", "schedule", "worklists", "referrals", "referring", "plans", "billing", "messages", "analytics", "performance", "operations", "admin"].includes(m.key)).map((m) => {
           const meta = MODULE_META[m.key];
           return (
             <Route key={m.key} path={m.path}>

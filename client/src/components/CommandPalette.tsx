@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { MODULES } from "@/modules";
 import { useTheme } from "@/lib/theme";
-import { Moon, ArrowRight } from "lucide-react";
+import { Moon, ArrowRight, Keyboard } from "lucide-react";
 
 // The Cmd+K command palette, the app's front door. In Phase 0 it jumps to any
 // module and toggles the theme. Later phases register patients, images, and
@@ -79,6 +79,13 @@ export function CommandPalette({
                 className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-content data-[selected=true]:bg-endo/12 data-[selected=true]:text-endo"
               >
                 <Moon className="h-4 w-4" /> Toggle light and dark mode
+              </Command.Item>
+              <Command.Item
+                value="Keyboard shortcuts help"
+                onSelect={() => go("/shortcuts")}
+                className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-content data-[selected=true]:bg-endo/12 data-[selected=true]:text-endo"
+              >
+                <Keyboard className="h-4 w-4" /> Keyboard shortcuts
               </Command.Item>
             </Command.Group>
           </Command.List>

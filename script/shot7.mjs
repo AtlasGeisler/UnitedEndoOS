@@ -1,0 +1,22 @@
+import { chromium } from "playwright";
+const BASE = "http://localhost:5173";
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+await page.goto(BASE, { waitUntil: "networkidle" });
+await page.fill('input[type="email"]', "manager@ue.demo");
+await page.fill('input[type="password"]', "demo1234");
+await page.click('button[type="submit"]');
+await page.waitForTimeout(1000);
+await page.goto(`${BASE}/analytics`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1200);
+await page.screenshot({ path: "/tmp/ueos-23-analytics.png" });
+await page.goto(`${BASE}/admin`, { waitUntil: "networkidle" });
+await page.waitForTimeout(900);
+await page.screenshot({ path: "/tmp/ueos-24-admin.png" });
+// Dark mode QA: toggle theme via localStorage and reload Today.
+await page.evaluate(() => localStorage.setItem("ueos-theme", "dark"));
+await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+await page.waitForTimeout(900);
+await page.screenshot({ path: "/tmp/ueos-25-dark.png" });
+await browser.close();
+console.log("done");

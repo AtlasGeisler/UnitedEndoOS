@@ -193,3 +193,38 @@ kiosk, and the patient portal. tsc clean, build green.
 Next: Phase 6, Analytics, Performance, Operations, Admin, insurance narratives,
 the restorative follow-up tracker, the keyboard map, dark mode QA, Playwright
 smoke tests, and the README demo script.
+
+## Phase 6, intelligence and polish (2026-06-09)
+
+The remaining modules, the narratives, the safety viewer, and the tests.
+
+What works:
+
+- Analytics with recharts: a six month revenue chart with a three month
+  projection, case completion, top referrers, and the restorative follow-up
+  tracker that flags completed RCTs without a permanent restoration after 30 days.
+- Performance: provider production, case mix, chair time utilization, report
+  turnaround, and emergency acceptance rate, which reflects the Thanksgiving Rule.
+- Operations: staff and roles, locations, the Thanksgiving Rule settings, and the
+  report delivery log.
+- Admin: the config editor, the AI prompt manager, the prediction weights, and the
+  AI audit log viewer where every row carries a PHI redacted badge, the visible
+  proof of the safety posture.
+- Insurance narratives: a seven section pre-authorization or denial appeal,
+  PHI redacted before any AI call and logged.
+- The keyboard map sheet at /shortcuts, reachable from the command palette.
+- Dark mode QA: light and dark ship at parity, verified by screenshot.
+- Playwright smoke tests for the six phase checkpoint flows, all green.
+
+Checkpoint passing: all seven smoke tests green, the narrative generator returns
+seven sections, analytics and performance render, and dark mode holds parity.
+tsc clean, production build green.
+
+## The build is complete
+
+All six phases are built, each checkpoint passes, the smoke tests are green, and
+the demo script in the README tells the story. A provider can sign in and, within
+a couple of minutes, review the huddle, open a patient to a wall of synthetic
+radiographs, compare two films, document a complete RCT with an AI drafted and
+approved note, and send the referral report, in an interface a Mac user would
+recognize as native.

@@ -35,12 +35,46 @@ uses the password `demo1234`.
 | admin@ue.demo | Administrator |
 | refdoc@gp.demo | Referring Doctor (portal) |
 
+## Guided demo, about five minutes
+
+Sign in as `provider@ue.demo`.
+
+1. Morning huddle. The Today page opens to the huddle: production against goal,
+   emergency slot status, unsigned notes, and an AI written brief.
+2. A wall of images. Open Patients, click a patient. The chart opens to the
+   imaging grid, not a form. Press Space on any radiograph for Quick Look, then
+   press Compare to view two films side by side or with an opacity swipe.
+3. A full visit. Open Clinical, open a visit. Fill the diagnosis and canals, click
+   AI draft note, edit, then Sign and lock. Click Generate referral report, then
+   Send. In the Inspector, click Analyze for AI overlay-pin findings.
+4. The Thanksgiving Rule. Open Schedule. The dashed slots are protected emergency
+   holds. As `frontdesk@ue.demo`, clicking one and booking a routine patient is
+   blocked. As `manager@ue.demo`, override with a reason. Click Pin to 2 PM, then
+   Release slots, and the held slots free.
+5. The referral loop. Open Referring Doctors, copy a portal link, open it in a new
+   tab, and submit a referral. It appears in the Referrals kanban. Treat it, and
+   the GP can download the report from the portal.
+6. Money. Open Billing. Submit a claim, Post ERA, and Collect the patient balance.
+7. Check in. Open `/kiosk`, enter a patient last name, and check in.
+8. Insight. Open Analytics for the revenue projection and the restorative
+   follow-up tracker, and Admin for the AI audit log where every row is PHI
+   redacted.
+
 ## Keyboard map
 
 - Cmd+K, command palette
 - Cmd+I, toggle the Inspector
 - Cmd+1 through Cmd+9, switch modules
 - Esc, close panels
+
+See the full map at `/shortcuts`.
+
+## Tests
+
+```bash
+npm run check    # tsc, no emit
+npm test         # Playwright smoke tests for the six checkpoint flows
+```
 
 ## Layout
 

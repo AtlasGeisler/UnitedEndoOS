@@ -13,6 +13,7 @@ import { registerPlanRoutes } from "./routes/plans";
 import { registerBillingRoutes } from "./routes/billing";
 import { registerMessagingRoutes } from "./routes/messaging";
 import { registerPublicRoutes } from "./routes/public";
+import { registerInsightRoutes } from "./routes/insights";
 
 // The API surface. Each phase mounts its own router here. Phase 0 covers auth
 // and clinics, Phase 1 adds patients and the imaging layer, Phase 2 adds the
@@ -31,6 +32,7 @@ export function registerRoutes(app: Express) {
   registerBillingRoutes(app);
   registerMessagingRoutes(app);
   registerPublicRoutes(app);
+  registerInsightRoutes(app);
 
   app.get("/api/clinics", requireAuth, async (_req, res) => {
     const rows = await db.select().from(clinics);
