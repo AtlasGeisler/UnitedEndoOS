@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/pgdata/
+data/images/*
+!data/images/.gitkeep
+.env
+*.log
+.DS_Store
+test-results/
+playwright-report/

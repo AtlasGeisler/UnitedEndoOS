@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Clinic Glass semantic tokens. Light mode is a warm parchment canvas with white
+  cards and ink text. Dark mode is an ink canvas with forest-tinted panels and
+  parchment text. Both ship at parity. endo is the single accent.
+*/
+:root {
+  --canvas: #f5f0e8;
+  --surface: #ffffff;
+  --surface-2: #f7f8f6;
+  --hairline: rgba(26, 26, 26, 0.1);
+  --content: #1a1a1a;
+  --content-soft: #5c6557;
+  --accent: #3a7d44;
+  --glass: rgba(255, 255, 255, 0.72);
+  color-scheme: light;
+}
+
+.dark {
+  --canvas: #161916;
+  --surface: #1f241f;
+  --surface-2: #262c25;
+  --hairline: rgba(245, 240, 232, 0.12);
+  --content: rgba(245, 240, 232, 0.92);
+  --content-soft: rgba(245, 240, 232, 0.55);
+  --accent: #4a9655;
+  --glass: rgba(30, 35, 30, 0.7);
+  color-scheme: dark;
+}
+
+* {
+  border-color: var(--hairline);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--content);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular numerals everywhere numbers line up in columns. */
+.tnum {
+  font-feature-settings: "tnum";
+}
+
+/* The translucent material used by the sidebar and floating panels. */
+.glass {
+  background: var(--glass);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* A quiet, Finder-like scrollbar. */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--hairline);
+  border-radius: 9px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--content-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
