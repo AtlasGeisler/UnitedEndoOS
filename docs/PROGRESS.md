@@ -102,3 +102,33 @@ mode. tsc clean.
 
 Next: Phase 3, the Schedule with drag and drop, the Thanksgiving Rule engine with
 an injectable clock, the Today huddle, and Worklists.
+
+## Phase 3, the flow of the day (2026-06-09)
+
+The day runs from a huddle, a schedule that protects emergency capacity, and
+worklists that show what to finish.
+
+What works:
+
+- The Thanksgiving Rule engine: emergency slots are protected and held until a
+  release time, by default 2 PM. A non-emergency booking into a still-protected
+  slot is blocked, a manager may override with a logged reason, and an emergency
+  booking is always allowed. The release job frees protected slots whose hold has
+  passed. The clock is injectable so the release is demonstrable on demand.
+- The Schedule day view: operatory columns, a time grid, drag and drop
+  rescheduling, emergency slot shading, and a booking dialog that enforces the
+  rule. A clock control and a release button make the rule visible.
+- The Today huddle: production against goal, emergency slot status, unconfirmed
+  patients, unsigned notes, referral SLA flags, CRM alerts, and an AI written one
+  paragraph brief.
+- Worklists: savable queues with counts and inline links, unsigned notes, unsent
+  reports, claims to submit, and recall due.
+
+Checkpoint passing, verified by API: front desk is blocked from a protected slot,
+a manager overrides with a reason, the release holds before 2 PM, and after the
+injectable clock advances to 2:05 PM the release frees the slots. Screenshots show
+the huddle, the schedule with emergency holds, and the worklists. tsc clean,
+production build green.
+
+Next: Phase 4, the Referrals kanban, the Referring Doctor CRM with an alerts job,
+the tokenized referring doctor portal, and treatment plans with e-signature.

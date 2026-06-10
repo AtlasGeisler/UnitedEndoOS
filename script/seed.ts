@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { db, client } from "../server/db";
 import { hashPassword } from "../server/auth";
 import { storage } from "../server/storage";
@@ -313,6 +314,51 @@ async function seed() {
     });
   }
 
+  // --- upcoming schedule with protected emergency slots ---
+  const emergencyType = apptTypes.find((t) => t.isEmergency)!;
+  const regularTypes = apptTypes.filter((t) => !t.isEmergency);
+  const ptsByClinic = new Map<number, s.Patient[]>();
+  for (const cid of clinicIds) {
+    ptsByClinic.set(cid, await db.select().from(s.patients).where(eq(s.patients.clinicId, cid)));
+  }
+  let upcoming = 0;
+  for (let dayOffset = 0; dayOffset < 6; dayOffset++) {
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() + dayOffset);
+    const dow = day.getDay();
+    if (dow === 0 || dow === 6) continue; // weekdays only
+    for (const cid of clinicIds) {
+      const clinicPts = ptsByClinic.get(cid) ?? [];
+      // Two protected emergency slots per day, held open until 2 PM.
+      for (const op of ["Op 1", "Op 2"]) {
+        const start = new Date(day); start.setHours(8 + Math.floor(rnd() * 2), 0, 0, 0);
+        const release = new Date(day); release.setHours(14, 0, 0, 0);
+        await db.insert(s.appointments).values({
+          clinicId: cid, providerId: pick(providers).id, appointmentTypeId: emergencyType.id,
+          operatory: op, startsAt: start, endsAt: new Date(start.getTime() + 60 * 60000),
+          isProtected: true, releaseTime: release, status: "protected", patientId: null,
+        });
+        upcoming++;
+      }
+      // Booked routine appointments through the day.
+      for (let h = 8; h <= 15; h++) {
+        if (rnd() > 0.55) continue;
+        const t = pick(regularTypes);
+        const start = new Date(day); start.setHours(h, rnd() > 0.5 ? 30 : 0, 0, 0);
+        await db.insert(s.appointments).values({
+          clinicId: cid, providerId: pick(providers).id, appointmentTypeId: t.id,
+          operatory: pick(["Op 1", "Op 2", "Op 3"]), startsAt: start,
+          endsAt: new Date(start.getTime() + t.durationMinutes * 60000),
+          patientId: clinicPts.length ? pick(clinicPts).id : null,
+          status: "scheduled", confirmed: rnd() > 0.3,
+        });
+        upcoming++;
+      }
+    }
+  }
+
+  console.log(`  ${upcoming} upcoming appointments and protected slots`);
   console.log(`\n  ${clinics.length} clinics, ${users.length} users, ${refDentists.length} referring dentists`);
   console.log(`  ${patientCount} patients, ~${imageCount} image studies rendered`);
   console.log("\nSeeded logins (password demo1234):");

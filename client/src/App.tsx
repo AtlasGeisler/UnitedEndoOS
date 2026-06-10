@@ -6,6 +6,9 @@ import { Patients } from "@/pages/Patients";
 import { PatientChart } from "@/pages/PatientChart";
 import { Clinical } from "@/pages/Clinical";
 import { VisitWorkspace } from "@/pages/VisitWorkspace";
+import { Today } from "@/pages/Today";
+import { Schedule } from "@/pages/Schedule";
+import { Worklists } from "@/pages/Worklists";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { MODULES } from "@/modules";
 
@@ -105,7 +108,10 @@ export function App() {
         <Route path="/patients/:id" component={PatientChart} />
         <Route path="/clinical" component={Clinical} />
         <Route path="/visits/:id" component={VisitWorkspace} />
-        {MODULES.filter((m) => m.key !== "patients" && m.key !== "clinical").map((m) => {
+        <Route path="/" component={Today} />
+        <Route path="/schedule" component={Schedule} />
+        <Route path="/worklists" component={Worklists} />
+        {MODULES.filter((m) => !["patients", "clinical", "today", "schedule", "worklists"].includes(m.key)).map((m) => {
           const meta = MODULE_META[m.key];
           return (
             <Route key={m.key} path={m.path}>

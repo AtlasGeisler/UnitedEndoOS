@@ -1,0 +1,23 @@
+import { chromium } from "playwright";
+const BASE = "http://localhost:5173";
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+await page.goto(BASE, { waitUntil: "networkidle" });
+await page.fill('input[type="email"]', "manager@ue.demo");
+await page.fill('input[type="password"]', "demo1234");
+await page.click('button[type="submit"]');
+await page.waitForTimeout(1200);
+await page.screenshot({ path: "/tmp/ueos-12-today.png" });
+await page.goto(`${BASE}/schedule`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1000);
+// pin to morning so protected slots show
+await page.evaluate(() => fetch("/api/dev/clock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ iso: new Date().toISOString().slice(0,10) + "T09:00:00" }) }));
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForTimeout(1000);
+await page.screenshot({ path: "/tmp/ueos-13-schedule.png" });
+await page.goto(`${BASE}/worklists`, { waitUntil: "networkidle" });
+await page.waitForTimeout(900);
+await page.screenshot({ path: "/tmp/ueos-14-worklists.png" });
+await page.evaluate(() => fetch("/api/dev/clock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ iso: null }) }));
+await browser.close();
+console.log("done");
