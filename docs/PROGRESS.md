@@ -163,3 +163,33 @@ and the plan presentation. tsc clean, build green.
 
 Next: Phase 5, billing from claim to paid, payments and payment plans, patient
 texting, reminders, intake, the kiosk, and the patient portal.
+
+## Phase 5, money and messages (2026-06-09)
+
+A visit goes from completed to a paid claim and a collected balance, patients
+text with the office, and they check themselves in at the kiosk.
+
+What works:
+
+- RCM lite: a simulated clearinghouse eligibility check, a claim created from a
+  visit, submitted, and resolved by an auto posted ERA that pays the insurance
+  share and lands the patient portion on the balance. The balance is then
+  collected on a mock gateway, and a pay by text link is generated.
+- The patient texting inbox on a simulated SMS transport, with threaded
+  conversations, a development outbox, and a reminder scheduler that queues a
+  reminder for each upcoming appointment.
+- The office kiosk self check-in, a public route where a patient finds their
+  appointment by last name and date of birth and is marked arrived, no login.
+- The read-only patient portal, reached with a per patient token: upcoming
+  visits, signed plans, balance, and secure messages.
+- The tokenized online intake form that writes a pending patient for staff
+  review.
+
+Checkpoint passing, verified by API: a visit billed from a draft claim through a
+posted ERA to a collected patient balance of zero, and a kiosk check-in that
+marks the appointment arrived. Screenshots show billing, the texting inbox, the
+kiosk, and the patient portal. tsc clean, build green.
+
+Next: Phase 6, Analytics, Performance, Operations, Admin, insurance narratives,
+the restorative follow-up tracker, the keyboard map, dark mode QA, Playwright
+smoke tests, and the README demo script.
