@@ -1,11 +1,12 @@
 import type { Express } from "express";
-import { and, eq, gte, lte, inArray } from "drizzle-orm";
+import { and, eq, gte, lte, inArray, ilike } from "drizzle-orm";
 import { db } from "../db";
 import { requireAuth, requireRole } from "../auth";
 import { audit } from "../audit";
 import { now, setClock, isPinned } from "../clock";
 import { bookSlot, runRelease, releaseTimeFor, emergencyTypeIds } from "../thanksgiving";
-import { appointments, appointmentTypes, patients, users, staffProfiles } from "../../shared/schema";
+import { extractScheduleFromImage, type ParsedAppointment } from "../ai";
+import { appointments, appointmentTypes, patients, users, staffProfiles, referringDentists } from "../../shared/schema";
 
 // The Schedule API and the Thanksgiving Rule endpoints. Bookings route through
 // the rule engine, drag and drop moves reschedule, the release job frees
@@ -123,5 +124,53 @@ export function registerScheduleRoutes(app: Express) {
     const types = await db.select().from(appointmentTypes);
     const emergency = await emergencyTypeIds();
     res.json({ types: types.map((t) => ({ ...t, isEmergency: emergency.has(t.id) })) });
+  });
+
+  // Schedule import from image: extract the day's appointments for review, then
+  // confirm to create them. A front desk or manager tool.
+  app.post("/api/schedule/import-image", requireAuth, requireRole("front_desk", "office_manager", "practice_owner", "admin"), async (req, res) => {
+    const { dataUrl, date } = req.body ?? {};
+    if (!dataUrl) return res.status(400).json({ error: "An image is required" });
+    const today = String(date ?? now().toISOString().slice(0, 10));
+    const result = await extractScheduleFromImage(String(dataUrl), today, req.user!.id);
+    await audit(req, { action: "schedule_import_extract", entityType: "schedule", detail: { extracted: result.appointments.length } });
+    res.json(result);
+  });
+
+  app.post("/api/schedule/confirm-import", requireAuth, requireRole("front_desk", "office_manager", "practice_owner", "admin"), async (req, res) => {
+    const scope = req.user!.clinicIds;
+    const clinicId = Number(req.body?.clinicId ?? scope[0]);
+    if (!scope.includes(clinicId)) return res.status(403).json({ error: "Clinic out of scope" });
+    const date = String(req.body?.date ?? now().toISOString().slice(0, 10));
+    const items: ParsedAppointment[] = Array.isArray(req.body?.appointments) ? req.body.appointments : [];
+
+    const types = await db.select().from(appointmentTypes);
+    const dentists = await db.select().from(referringDentists);
+    let patientsCreated = 0, appointmentsCreated = 0;
+
+    for (const a of items) {
+      if (!a.patientName) continue;
+      const [first, ...rest] = a.patientName.trim().split(" ");
+      const last = rest.join(" ") || first;
+      // Find or create the patient, pending staff review.
+      let patient = await db.query.patients.findFirst({ where: and(eq(patients.clinicId, clinicId), ilike(patients.firstName, first), ilike(patients.lastName, last)) });
+      if (!patient) {
+        const refDoc = a.referringDoctor ? dentists.find((d) => d.fullName.toLowerCase().includes(a.referringDoctor!.replace(/^dr\.?\s*/i, "").toLowerCase())) : null;
+        [patient] = await db.insert(patients).values({ clinicId, firstName: first, lastName: last, dateOfBirth: "1990-01-01", status: "pending_review", referringDentistId: refDoc?.id ?? null }).returning();
+        patientsCreated++;
+      }
+      // Match the appointment type by name.
+      const type = types.find((t) => (a.appointmentType ?? "").toLowerCase().includes(t.name.split(",")[0].toLowerCase().slice(0, 6))) ?? types[0];
+      const start = new Date(`${a.date || date}T${(a.time || "09:00").padStart(5, "0")}:00`);
+      const dur = a.duration && a.duration > 0 ? a.duration : 60;
+      await db.insert(appointments).values({
+        clinicId, patientId: patient.id, providerId: null, appointmentTypeId: type?.id ?? null,
+        operatory: "Op 1", startsAt: start, endsAt: new Date(start.getTime() + dur * 60000),
+        status: "scheduled", confirmed: false, note: a.notes ?? null,
+      });
+      appointmentsCreated++;
+    }
+    await audit(req, { action: "schedule_import_confirm", entityType: "schedule", clinicId, detail: { patientsCreated, appointmentsCreated } });
+    res.json({ patientsCreated, appointmentsCreated });
   });
 }

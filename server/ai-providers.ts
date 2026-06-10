@@ -6,6 +6,8 @@
 export interface AIProvider {
   name: string;
   chat(system: string, user: string): Promise<string>;
+  // Optional vision call. Present only on providers that support images.
+  vision?(system: string, user: string, imageBase64: string, mediaType: string): Promise<string>;
 }
 
 class MockProvider implements AIProvider {
@@ -39,6 +41,34 @@ class AnthropicProvider implements AIProvider {
     const data = await res.json();
     // Find the text block. With thinking omitted on Opus 4.8 the text block is
     // first, but search rather than assume, to stay robust across models.
+    const block = (data.content ?? []).find((b: { type: string }) => b.type === "text");
+    return block?.text ?? "";
+  }
+
+  // Vision: send an image plus text and read back the text response.
+  async vision(system: string, user: string, imageBase64: string, mediaType: string): Promise<string> {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": this.key,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: 2048,
+        system,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
+            { type: "text", text: user },
+          ],
+        }],
+      }),
+    });
+    if (!res.ok) throw new Error(`Anthropic vision error ${res.status}`);
+    const data = await res.json();
     const block = (data.content ?? []).find((b: { type: string }) => b.type === "text");
     return block?.text ?? "";
   }

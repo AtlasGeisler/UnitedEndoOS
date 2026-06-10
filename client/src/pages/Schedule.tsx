@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, addDays } from "date-fns";
-import { ChevronLeft, ChevronRight, ShieldAlert, Clock, Unlock, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShieldAlert, Clock, Unlock, X, ImageUp, Sparkles, Check } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type { PatientRow } from "@/lib/clinical-types";
+
+interface ParsedAppt {
+  patientName: string; time: string; date: string; duration: number;
+  tooth?: string; appointmentType?: string; referringDoctor?: string; notes?: string;
+}
 
 interface Appt {
   id: number;
@@ -47,6 +52,7 @@ export function Schedule() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const clinicId = user?.clinicIds[0];
   const [booking, setBooking] = useState<Appt | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["/api/schedule", date, clinicId],
@@ -106,6 +112,7 @@ export function Schedule() {
           </div>
           <Button variant="outline" size="sm" onClick={pinTo2pm} title="Demo: pin the clock to 2:05 PM">Pin to 2 PM</Button>
           {data?.clockPinned && <Button variant="ghost" size="sm" onClick={() => setClock.mutate(null)}>Reset clock</Button>}
+          <Button variant="outline" size="sm" onClick={() => setImporting(true)}><ImageUp className="h-4 w-4" /> Import from image</Button>
           <Button size="sm" onClick={() => release.mutate()} disabled={release.isPending}><Unlock className="h-4 w-4" /> Release slots</Button>
         </div>
       </div>
@@ -171,6 +178,7 @@ export function Schedule() {
       </div>
 
       {booking && <BookDialog slot={booking} onClose={() => setBooking(null)} />}
+      {importing && clinicId != null && <ImportDialog clinicId={clinicId} date={date} onClose={() => setImporting(false)} />}
     </div>
   );
 }
@@ -237,6 +245,87 @@ function BookDialog({ slot, onClose }: { slot: Appt; onClose: () => void }) {
           {book.isPending ? "Booking..." : "Book into slot"}
         </Button>
         {!isManager && !emergency && <p className="mt-2 text-center text-[11px] text-content-soft">Front desk cannot book a protected slot early. Mark it an emergency, or ask a manager to override.</p>}
+      </div>
+    </div>
+  );
+}
+
+// Schedule import from image. Upload a schedule photo, the AI extracts the
+// appointments for review, then a confirm step creates them. On the offline mock
+// a realistic sample is returned so the flow is demonstrable.
+function ImportDialog({ clinicId, date, onClose }: { clinicId: number; date: string; onClose: () => void }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [rows, setRows] = useState<ParsedAppt[] | null>(null);
+  const [include, setInclude] = useState<Record<number, boolean>>({});
+  const [provider, setProvider] = useState<string>("");
+  const [note, setNote] = useState<string | null>(null);
+
+  const extract = useMutation({
+    mutationFn: () => apiRequest<{ appointments: ParsedAppt[]; provider: string; error?: string }>("POST", "/api/schedule/import-image", { dataUrl, date }),
+    onSuccess: (r) => { setRows(r.appointments); setProvider(r.provider); setNote(r.error ?? null); setInclude(Object.fromEntries(r.appointments.map((_, i) => [i, true]))); },
+  });
+  const confirm = useMutation({
+    mutationFn: () => apiRequest<{ patientsCreated: number; appointmentsCreated: number }>("POST", "/api/schedule/confirm-import", { clinicId, date, appointments: (rows ?? []).filter((_, i) => include[i]) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/schedule"] }); onClose(); },
+  });
+
+  const onFile = (file?: File) => {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => setDataUrl(r.result as string);
+    r.readAsDataURL(file);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl border border-hairline bg-surface p-5 shadow-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center gap-2">
+          <ImageUp className="h-4 w-4 text-endo" />
+          <h2 className="text-[15px] font-semibold">Import schedule from image</h2>
+          <button onClick={onClose} className="ml-auto text-content-soft hover:text-content"><X className="h-4 w-4" /></button>
+        </div>
+
+        {!rows ? (
+          <>
+            <label className="mb-3 flex aspect-[16/7] cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-hairline bg-[var(--surface-2)] text-content-soft hover:border-endo/50">
+              {dataUrl ? <img src={dataUrl} alt="Schedule" className="max-h-full max-w-full rounded" /> : <><ImageUp className="h-7 w-7" /><span className="text-[13px]">Click to choose a schedule photo or screenshot</span></>}
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+            </label>
+            <Button className="w-full" disabled={!dataUrl || extract.isPending} onClick={() => extract.mutate()}>
+              <Sparkles className="h-4 w-4" /> {extract.isPending ? "Reading schedule..." : "Extract appointments"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="mb-2 flex items-center gap-2 text-[12px] text-content-soft">
+              Extracted {rows.length} appointment{rows.length === 1 ? "" : "s"} via {provider}. Review, then create.
+              {note && <span className="text-caution">{note}</span>}
+            </div>
+            <div className="max-h-72 overflow-y-auto rounded-lg border border-hairline">
+              <table className="w-full text-[12px]">
+                <thead><tr className="border-b border-hairline text-left text-[10px] uppercase text-content-soft"><th className="px-2 py-1"></th><th className="px-2 py-1">Time</th><th className="px-2 py-1">Patient</th><th className="px-2 py-1">Type</th><th className="px-2 py-1">Tooth</th><th className="px-2 py-1">Referrer</th></tr></thead>
+                <tbody>
+                  {rows.map((a, i) => (
+                    <tr key={i} className="border-b border-hairline last:border-0">
+                      <td className="px-2 py-1.5"><input type="checkbox" checked={!!include[i]} onChange={(e) => setInclude({ ...include, [i]: e.target.checked })} className="accent-endo" /></td>
+                      <td className="px-2 py-1.5 tnum">{a.time}</td>
+                      <td className="px-2 py-1.5 font-medium">{a.patientName}</td>
+                      <td className="px-2 py-1.5 text-content-soft">{a.appointmentType}</td>
+                      <td className="px-2 py-1.5 tnum">{a.tooth ?? ""}</td>
+                      <td className="px-2 py-1.5 text-content-soft">{a.referringDoctor ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setRows(null)}>Back</Button>
+              <Button className="flex-1" disabled={confirm.isPending || Object.values(include).every((v) => !v)} onClick={() => confirm.mutate()}>
+                <Check className="h-4 w-4" /> {confirm.isPending ? "Creating..." : `Create ${Object.values(include).filter(Boolean).length} appointments`}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

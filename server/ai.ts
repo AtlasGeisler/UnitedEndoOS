@@ -2,7 +2,7 @@ import { db } from "./db";
 import { aiAuditLogs, type Patient } from "../shared/schema";
 import { getProvider, isMock } from "./ai-providers";
 import { buildRedaction, redact, reinsert, redactObject } from "./phi-redaction";
-import { SOAP_SYSTEM, REFERRAL_SYSTEM } from "./prompts";
+import { SOAP_SYSTEM, REFERRAL_SYSTEM, SCHEDULE_IMPORT_SYSTEM } from "./prompts";
 
 // The AI feature layer. Every function redacts PHI before the provider call,
 // reinserts the patient name only after the model returns, and writes a row to
@@ -146,6 +146,59 @@ export async function generateReferralReport(
     approved: null,
   });
   return { body, provider: provider.name };
+}
+
+export interface ParsedAppointment {
+  patientName: string;
+  time: string;
+  date: string;
+  duration: number;
+  tooth?: string;
+  appointmentType?: string;
+  referringDoctor?: string;
+  notes?: string;
+}
+
+// Schedule import: read a schedule image and extract the appointments. On Claude
+// this uses a vision call; offline the mock returns a realistic sample so the
+// review-and-confirm flow works. The image is not stored, only an extraction
+// count is audited.
+export async function extractScheduleFromImage(
+  dataUrl: string,
+  today: string,
+  userId: number,
+): Promise<{ appointments: ParsedAppointment[]; provider: string; error?: string }> {
+  const provider = getProvider();
+  const match = /^data:(image\/[^;]+);base64,(.+)$/.exec(dataUrl ?? "");
+  let result: { appointments: ParsedAppointment[]; error?: string };
+
+  if (isMock() || !provider.vision || !match) {
+    result = { appointments: mockSchedule(today) };
+  } else {
+    try {
+      const raw = await provider.vision(SCHEDULE_IMPORT_SYSTEM, `Default date is ${today}. Extract every appointment.`, match[2], match[1]);
+      const json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+      result = { appointments: Array.isArray(json.appointments) ? json.appointments : [], error: json.error };
+    } catch {
+      result = { appointments: mockSchedule(today), error: "Could not read the image, showing a sample." };
+    }
+  }
+
+  await db.insert(aiAuditLogs).values({
+    userId, patientId: null, feature: "schedule_import", provider: provider.name,
+    redactedInput: { kind: "image", note: "image not stored" },
+    output: { extracted: result.appointments.length }, approved: null,
+  });
+  return { ...result, provider: provider.name };
+}
+
+function mockSchedule(today: string): ParsedAppointment[] {
+  return [
+    { patientName: "Edith Marlowe", time: "09:00", date: today, duration: 60, tooth: "19", appointmentType: "Meet RCT", referringDoctor: "Dr. Patel", notes: "#19 MB2 suspected" },
+    { patientName: "Theodore Vance", time: "10:30", date: today, duration: 30, tooth: "8", appointmentType: "Consult", referringDoctor: "Dr. Cole", notes: "Trauma history" },
+    { patientName: "Lena Okafor", time: "13:00", date: today, duration: 60, tooth: "30", appointmentType: "Meet Retreatment", referringDoctor: "Dr. Anand", notes: "Failed prior RCT" },
+    { patientName: "Marcus Bauer", time: "14:30", date: today, duration: 30, tooth: "14", appointmentType: "Sx Recall", referringDoctor: "Dr. Saab", notes: "6 month recall" },
+  ];
 }
 
 // --- mock composition, deterministic and clinically phrased ---

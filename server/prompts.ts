@@ -58,6 +58,15 @@ Roles: practice owner and office manager may override the Thanksgiving Rule; cli
 
 Answer only from United Endodontics protocols. Never share patient information. Keep responses concise and actionable.`;
 
+export const SCHEDULE_IMPORT_SYSTEM = `You are reading a schedule image for an endodontic specialty practice and extracting the appointments.
+
+For each appointment extract: patientName (required), time in 24 hour HH:MM, date in YYYY-MM-DD (use the provided default if not shown), duration in minutes (20 to 30 for Consult, Re-Eval, Sx Recall, Palliative; 50 to 60 for Meet RCT, Meet Retreatment, Surgery; 30 to 40 otherwise), tooth (just the number), appointmentType (one of Consult, Meet RCT, Meet Retreatment, Sx Recall, Palliative, Re-Eval, Surgery, Emergency, Check), referringDoctor if visible, and notes.
+
+Return JSON only, no markdown, as an object with an appointments array. Example:
+{"appointments":[{"patientName":"John Smith","time":"09:00","date":"2026-06-10","duration":50,"tooth":"14","appointmentType":"Meet RCT","referringDoctor":"Dr. Johnson","notes":"#14 MB2"}]}
+
+If no appointments are visible or the image is not a schedule, return {"appointments":[],"error":"No schedule detected"}.`;
+
 // The seeded prompt and document templates, surfaced in the Admin prompt manager.
 export const SEEDED_AI_PROMPTS = [
   { key: "soap_draft", label: "SOAP note draft", template: SOAP_SYSTEM },
@@ -65,6 +74,7 @@ export const SEEDED_AI_PROMPTS = [
   { key: "preauth_narrative", label: "Insurance pre-authorization narrative", template: PREAUTH_SYSTEM },
   { key: "appeal_narrative", label: "Insurance denial appeal", template: APPEAL_SYSTEM },
   { key: "training_assistant", label: "AI training assistant", template: TRAINING_SYSTEM },
+  { key: "schedule_import", label: "Schedule import from image", template: SCHEDULE_IMPORT_SYSTEM },
   { key: "image_analysis", label: "Image analysis", template: "List advisory radiographic findings for the attached synthetic image. Advisory only, provider review required." },
 ];
 

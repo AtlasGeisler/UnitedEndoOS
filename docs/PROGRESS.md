@@ -283,3 +283,30 @@ What changed:
 Verified: tsc clean, build green, all seven smoke tests pass, the live narrative
 runs on Claude with carrier intelligence and PHI redaction, and the Admin prompt
 manager lists the six mined prompts.
+
+## Mined the schedule-import-from-image feature (2026-06-09)
+
+The prototype's AI schedule import was mined: a staff member uploads a photo or
+screenshot of a paper or external schedule, the model reads it, and the
+appointments are reviewed and created.
+
+What works:
+
+- The Anthropic provider gained a vision method, sending an image plus text and
+  reading back the structured response. The mined extraction prompt asks for each
+  appointment's patient, time, date, duration, tooth, type, and referring doctor
+  as JSON.
+- A new ai.ts function reads a schedule image. On Claude it uses the vision call,
+  offline it returns a realistic sample so the flow is demonstrable. The image is
+  not stored, only an extraction count is audited.
+- Two routes, gated to front desk, manager, owner, and admin: import-image
+  extracts the appointments for review, and confirm-import finds or creates each
+  patient (pending review), matches the referring dentist by name, and books the
+  appointment at the parsed time and type.
+- The Schedule page gained an Import from image button and a dialog: upload,
+  extract, review the table with per row include toggles, then create.
+
+Verified end to end on Claude: a synthetic schedule image yielded four
+appointments with correct times, teeth, types, and referrers, and confirming
+created the patients and appointments on the day. tsc clean, build green, all
+seven smoke tests pass.
