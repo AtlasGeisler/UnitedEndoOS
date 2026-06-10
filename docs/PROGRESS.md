@@ -132,3 +132,34 @@ production build green.
 
 Next: Phase 4, the Referrals kanban, the Referring Doctor CRM with an alerts job,
 the tokenized referring doctor portal, and treatment plans with e-signature.
+
+## Phase 4, the growth engine (2026-06-09)
+
+The referral loop is closed: a GP submits through the portal, the practice treats,
+and the GP downloads the finished report.
+
+What works:
+
+- The Referrals kanban: a pipeline from received to closed with cards that drag
+  between stages, plus a staff intake form that mirrors the portal.
+- The Referring Doctor CRM: the list with lifetime counts, then a profile with a
+  referral trend sparkline, the copyable tokenized portal link, alerts, recent
+  patients referred with visit counts, touchpoints, and delivery preferences.
+- The CRM alerts job recomputes milestones, lapsed referrers, low volume, and
+  report SLA risk from the data, idempotently.
+- The tokenized referring doctor portal, served outside the app shell with no
+  login. A GP submits a referral, watches its status, and downloads the delivered
+  report. The token is signed so it cannot be guessed, and an invalid token is
+  rejected.
+- Treatment plans: multi option plans (retreat, apico, extract and refer back)
+  with per option fees and insurance estimates, a canvas e-signature, and a signed
+  snapshot rendered and stored to files.
+
+Checkpoint passing, verified by API: a referral submitted through the portal
+appears in the pipeline as a portal referral, is treated to a signed note and a
+delivered report, and the GP downloads that report through the portal, while an
+unauthorized token is refused. Screenshots show the portal, the kanban, the CRM,
+and the plan presentation. tsc clean, build green.
+
+Next: Phase 5, billing from claim to paid, payments and payment plans, patient
+texting, reminders, intake, the kiosk, and the patient portal.

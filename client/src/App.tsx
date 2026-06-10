@@ -9,6 +9,10 @@ import { VisitWorkspace } from "@/pages/VisitWorkspace";
 import { Today } from "@/pages/Today";
 import { Schedule } from "@/pages/Schedule";
 import { Worklists } from "@/pages/Worklists";
+import { Referrals } from "@/pages/Referrals";
+import { ReferringDoctors } from "@/pages/ReferringDoctors";
+import { Plans } from "@/pages/Plans";
+import { Portal } from "@/pages/Portal";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { MODULES } from "@/modules";
 
@@ -90,6 +94,10 @@ const MODULE_META: Record<string, { blurb: string; phase: string }> = {
 export function App() {
   const { user, isLoading } = useAuth();
 
+  // The referring doctor portal is public and renders outside the app shell and
+  // the auth gate. A GP reaches it with a token, no login.
+  if (location.pathname.startsWith("/portal")) return <Portal />;
+
   if (isLoading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-canvas text-content-soft">
@@ -111,7 +119,10 @@ export function App() {
         <Route path="/" component={Today} />
         <Route path="/schedule" component={Schedule} />
         <Route path="/worklists" component={Worklists} />
-        {MODULES.filter((m) => !["patients", "clinical", "today", "schedule", "worklists"].includes(m.key)).map((m) => {
+        <Route path="/referrals" component={Referrals} />
+        <Route path="/referring-doctors" component={ReferringDoctors} />
+        <Route path="/plans" component={Plans} />
+        {MODULES.filter((m) => !["patients", "clinical", "today", "schedule", "worklists", "referrals", "referring", "plans"].includes(m.key)).map((m) => {
           const meta = MODULE_META[m.key];
           return (
             <Route key={m.key} path={m.path}>
