@@ -22,6 +22,7 @@ import { Performance } from "@/pages/Performance";
 import { Operations } from "@/pages/Operations";
 import { Admin } from "@/pages/Admin";
 import { Shortcuts } from "@/pages/Shortcuts";
+import { Tutorial } from "@/pages/Tutorial";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { MODULES } from "@/modules";
 
@@ -140,6 +141,7 @@ export function App() {
         <Route path="/operations" component={Operations} />
         <Route path="/admin" component={Admin} />
         <Route path="/shortcuts" component={Shortcuts} />
+        <Route path="/tutorial" component={Tutorial} />
         {MODULES.filter((m) => !["patients", "clinical", "today", "schedule", "worklists", "referrals", "referring", "plans", "billing", "messages", "analytics", "performance", "operations", "admin"].includes(m.key)).map((m) => {
           const meta = MODULE_META[m.key];
           return (

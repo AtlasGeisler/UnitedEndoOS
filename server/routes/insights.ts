@@ -111,6 +111,16 @@ export function registerInsightRoutes(app: Express) {
     });
   });
 
+  // Tune a prediction weight, admin and owner only.
+  app.patch("/api/admin/ai-weights/:id", requireAuth, async (req, res) => {
+    if (req.user!.role !== "admin" && req.user!.role !== "practice_owner") return res.status(403).json({ error: "Admins only" });
+    const id = Number(req.params.id);
+    const weight = Number(req.body?.weight);
+    if (!Number.isFinite(weight)) return res.status(400).json({ error: "weight required" });
+    const [row] = await db.update(aiPredictionWeights).set({ weight }).where(eq(aiPredictionWeights.id, id)).returning();
+    res.json({ weight: row });
+  });
+
   app.get("/api/admin/ai-audit", requireAuth, async (_req, res) => {
     const rows = await db.select().from(aiAuditLogs).orderBy(desc(aiAuditLogs.createdAt)).limit(40);
     res.json({ logs: rows });

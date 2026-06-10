@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { Sparkles, Check } from "lucide-react";
+import { apiRequest } from "@/lib/api";
 import {
   ETIOLOGY, FINDING_GROUPS, RADIOGRAPHIC, TREATMENT_PERFORMED, RECOMMENDATIONS,
   PROGNOSIS_OPTIONS, PROGNOSIS_FACTORS, SPECIAL_DIAGNOSES, PULPAL_DX, APICAL_DX,
@@ -65,6 +68,7 @@ export function StructuredFindings({
             <Select label="Pulpal" value={value.pulpalDiagnosis ?? ""} options={PULPAL_DX} disabled={locked} onChange={(v) => onCommit({ pulpalDiagnosis: v })} />
             <Select label="Apical" value={value.apicalDiagnosis ?? ""} options={APICAL_DX} disabled={locked} onChange={(v) => onCommit({ apicalDiagnosis: v })} />
           </div>
+          {!locked && <Predictor value={value} onCommit={onCommit} />}
           <Chips title="Special diagnoses" flags={SPECIAL_DIAGNOSES} map={value.specialDiagnoses} locked={locked} onToggle={(m) => onCommit({ specialDiagnoses: m })} />
         </>
       )}
@@ -103,6 +107,53 @@ export function StructuredFindings({
           <Chips title="Recommendations" flags={RECOMMENDATIONS} map={value.recommendations} locked={locked} onToggle={(m) => onCommit({ recommendations: m })} />
         </>
       )}
+    </div>
+  );
+}
+
+interface Prediction {
+  diagnosis: { pulpalDiagnosis: string; apicalDiagnosis: string; confidence: number; findings: string[] };
+  prognosis: { prognosis: string; confidence: number; factors: string[] };
+}
+
+// The diagnosis and prognosis predictor: scores the structured findings and
+// offers a predicted pulpal and apical diagnosis and prognosis to apply.
+function Predictor({ value, onCommit }: { value: StructuredValue; onCommit: (patch: Partial<StructuredValue>) => void }) {
+  const [pred, setPred] = useState<Prediction | null>(null);
+  const predict = useMutation({
+    mutationFn: () => apiRequest<Prediction>("POST", "/api/predict", { clinicalFindings: value.clinicalFindings ?? {}, prognosisFactors: value.prognosisFactors ?? {} }),
+    onSuccess: setPred,
+  });
+
+  return (
+    <div className="mb-3 rounded-lg border border-endo/25 bg-endo/6 p-2.5">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-3.5 w-3.5 text-endo" />
+        <span className="text-[12px] font-semibold text-endo">Diagnosis predictor</span>
+        <button onClick={() => predict.mutate()} disabled={predict.isPending} className="ml-auto rounded-md bg-endo/12 px-2 py-0.5 text-[11px] font-medium text-endo">
+          {predict.isPending ? "Scoring..." : "Predict from findings"}
+        </button>
+      </div>
+      {pred && (
+        <div className="mt-2 space-y-1.5 text-[12px]">
+          <PredRow label="Pulpal" value={pred.diagnosis.pulpalDiagnosis} conf={pred.diagnosis.confidence} onApply={() => onCommit({ pulpalDiagnosis: pred.diagnosis.pulpalDiagnosis })} />
+          <PredRow label="Apical" value={pred.diagnosis.apicalDiagnosis} conf={pred.diagnosis.confidence} onApply={() => onCommit({ apicalDiagnosis: pred.diagnosis.apicalDiagnosis })} />
+          <PredRow label="Prognosis" value={pred.prognosis.prognosis} conf={pred.prognosis.confidence} onApply={() => onCommit({ prognosis: pred.prognosis.prognosis })} />
+          {pred.diagnosis.findings.length > 0 && <div className="text-[11px] text-content-soft">Drivers: {pred.diagnosis.findings.join(", ")}</div>}
+          <div className="text-[10px] text-content-soft">Advisory, confirm before signing.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PredRow({ label, value, conf, onApply }: { label: string; value: string; conf: number; onApply: () => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-16 text-content-soft">{label}</span>
+      <span className="font-medium">{value}</span>
+      <span className="text-[10px] text-content-soft tnum">{Math.round(conf * 100)}%</span>
+      <button onClick={onApply} className="ml-auto flex items-center gap-1 rounded bg-endo/12 px-1.5 py-0.5 text-[10px] text-endo"><Check className="h-3 w-3" /> Apply</button>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Sliders, Bot, Scale, ScrollText, ShieldCheck } from "lucide-react";
+import { Sliders, Bot, Scale, ShieldCheck } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -79,11 +79,16 @@ export function Admin() {
 
           {tab === "Prediction weights" && (
             <Panel icon={Scale} title="Diagnosis predictor weights">
+              <p className="mb-2 text-[12px] text-content-soft">Tune how strongly each finding drives the predicted diagnosis and prognosis. Higher weight, stronger influence.</p>
               <table className="w-full text-[13px]">
                 <thead><tr className="text-left text-[11px] uppercase text-content-soft"><th className="py-1">Finding</th><th>Suggests</th><th className="text-right">Weight</th></tr></thead>
                 <tbody>
                   {(config.data?.weights ?? []).map((w) => (
-                    <tr key={w.id} className="border-t border-hairline"><td className="py-1.5 capitalize">{w.finding}</td><td className="text-content-soft">{w.pulpalDiagnosis ?? w.apicalDiagnosis}</td><td className="text-right tnum">{w.weight.toFixed(1)}</td></tr>
+                    <tr key={w.id} className="border-t border-hairline">
+                      <td className="py-1.5 capitalize">{w.finding}</td>
+                      <td className="text-content-soft">{w.pulpalDiagnosis ?? w.apicalDiagnosis}</td>
+                      <td className="text-right"><WeightInput id={w.id} value={w.weight} /></td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -92,6 +97,19 @@ export function Admin() {
         </div>
       </div>
     </div>
+  );
+}
+
+function WeightInput({ id, value }: { id: number; value: number }) {
+  const [v, setV] = useState(value);
+  const save = useMutation({ mutationFn: (weight: number) => apiRequest("PATCH", `/api/admin/ai-weights/${id}`, { weight }) });
+  return (
+    <input
+      type="number" step="0.5" value={v}
+      onChange={(e) => setV(Number(e.target.value))}
+      onBlur={() => v !== value && save.mutate(v)}
+      className="w-16 rounded-md border border-hairline bg-[var(--surface-2)] px-1.5 py-0.5 text-right text-[12px] tnum outline-none focus:ring-2 focus:ring-sage"
+    />
   );
 }
 

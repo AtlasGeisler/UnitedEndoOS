@@ -8,6 +8,8 @@ import {
   reportDeliveryLog, referringDentists, users, imageAnnotations,
 } from "../../shared/schema";
 import { generateSoapDraft, analyzeImage, generateReferralReport, type SoapInput } from "../ai";
+import { predictDiagnosis, predictPrognosis } from "../predictor";
+import { deliver, devOutbox, deliveryConfigured, type Channel } from "../delivery";
 
 // The clinical cockpit API. A note is authored and signed by a clinician, never
 // by the model. Once signed a note is locked and accepts only addenda. AI drafts
@@ -160,6 +162,17 @@ export function registerVisitRoutes(app: Express) {
     res.json({ draft });
   });
 
+  // Diagnosis and prognosis prediction from the structured findings. Advisory,
+  // the clinician confirms and applies.
+  app.post("/api/predict", requireAuth, async (req, res) => {
+    const { clinicalFindings, prognosisFactors } = req.body ?? {};
+    const [diagnosis, prognosis] = await Promise.all([
+      predictDiagnosis(clinicalFindings),
+      predictPrognosis(prognosisFactors),
+    ]);
+    res.json({ diagnosis, prognosis });
+  });
+
   // AI image analysis: advisory overlay-pin findings, persisted to the study.
   app.post("/api/studies/:id/analyze", requireAuth, async (req, res) => {
     const id = Number(req.params.id);
@@ -210,12 +223,30 @@ export function registerVisitRoutes(app: Express) {
     if (!report) return res.status(404).json({ error: "Report not found" });
     const patient = await db.query.patients.findFirst({ where: eq(patients.id, report.patientId) });
     if (!patient || !req.user!.clinicIds.includes(patient.clinicId)) return res.status(404).json({ error: "Not found" });
-    const channel = req.body?.channel ?? "portal";
-    const now = new Date();
-    await db.update(referralReports).set({ status: "delivered", approvedBy: req.user!.id, deliveredAt: now }).where(eq(referralReports.id, id));
-    await db.insert(reportDeliveryLog).values({ referralReportId: id, referringDentistId: report.referringDentistId, channel, status: "sent" });
-    await audit(req, { action: "deliver_report", entityType: "referral_report", entityId: id, clinicId: patient.clinicId, detail: { channel } });
-    res.json({ ok: true, deliveredAt: now, channel });
+    const channel = (req.body?.channel ?? "portal") as Channel;
+    const dentist = report.referringDentistId
+      ? await db.query.referringDentists.findFirst({ where: eq(referringDentists.id, report.referringDentistId) })
+      : null;
+
+    // Route through the delivery service: real email when configured, otherwise
+    // simulated into the development outbox.
+    const result = await deliver({
+      channel,
+      to: channel === "fax" ? (dentist?.fax ?? "fax") : channel === "email" ? (dentist?.email ?? "email") : (dentist?.fullName ?? "portal"),
+      subject: `Referral report for ${patient.firstName} ${patient.lastName}`,
+      body: report.body ?? "",
+    });
+
+    const when = new Date();
+    await db.update(referralReports).set({ status: "delivered", approvedBy: req.user!.id, deliveredAt: when }).where(eq(referralReports.id, id));
+    await db.insert(reportDeliveryLog).values({ referralReportId: id, referringDentistId: report.referringDentistId, channel, status: result.success ? "sent" : "failed", detail: `${result.transport}, ${result.messageId}` });
+    await audit(req, { action: "deliver_report", entityType: "referral_report", entityId: id, clinicId: patient.clinicId, detail: { channel, transport: result.transport, simulated: result.simulated } });
+    res.json({ ok: result.success, deliveredAt: when, channel, transport: result.transport, simulated: result.simulated, messageId: result.messageId });
+  });
+
+  // The development outbox, where simulated deliveries land.
+  app.get("/api/dev/outbox", requireAuth, (_req, res) => {
+    res.json({ configured: deliveryConfigured(), outbox: devOutbox() });
   });
 
   // Annotations are overlay geometry on an asset. Originals are never mutated.

@@ -310,3 +310,33 @@ Verified end to end on Claude: a synthetic schedule image yielded four
 appointments with correct times, teeth, types, and referrers, and confirming
 created the patients and appointments on the day. tsc clean, build green, all
 seven smoke tests pass.
+
+## Mined three more prototype features (2026-06-09)
+
+Diagnosis and prognosis prediction, the interactive tutorial, and the report
+delivery service were mined from the prototype.
+
+Diagnosis and prognosis predictor:
+- A server scoring module weights the structured clinical findings into a pulpal
+  and apical score that map to AAE diagnoses, and prognosis factors into a score
+  that maps to favorable, questionable, or unfavorable. Weights default in code
+  and are tunable in the aiPredictionWeights table, editable in Admin.
+- The cockpit Diagnosis tab gained a predictor panel: predict from the findings,
+  see the suggested pulpal, apical, and prognosis with confidence and the
+  drivers, and apply with one click. Advisory, the clinician confirms.
+
+Interactive tutorial:
+- An eight step guided tour, reachable from the command palette, that walks a new
+  user through the day, the schedule, the image-first chart, the cockpit, the AI
+  features, the growth engine, analytics, and admin, each step linking to its
+  module.
+
+Report delivery service:
+- A pluggable transport: email goes through SendGrid when a key is set, otherwise
+  every channel (email, fax, portal, print) is simulated into a development
+  outbox. The report deliver flow routes through it and records the transport and
+  message id in the delivery log.
+
+Verified: tsc clean, build green, all seven smoke tests pass. The predictor
+returned Pulp necrosis and Chronic apical abscess with an unfavorable prognosis,
+a weight edit saved, and a simulated fax delivery landed in the outbox.
