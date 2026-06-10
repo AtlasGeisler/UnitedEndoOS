@@ -151,7 +151,13 @@ async function seed() {
     { key: "thanksgiving_rule", value: { releaseHour: 14, managerOverride: true } },
     { key: "ai_provider", value: { provider: "mock" } },
   ]);
-  await db.insert(s.carrierPatterns).values(CARRIERS.slice(0, 5).map((c) => ({ carrier: c, note: `${c} typically requests a periapical and a narrative for D3330.`, patternJson: { needsNarrative: true } })));
+  await db.insert(s.carrierPatterns).values(CARRIERS.slice(0, 5).map((c, i) => ({
+    carrierName: c, procedureCode: "D3330",
+    approvalRate: 72 + i * 4, denialRate: 28 - i * 4, avgProcessingDays: 12 + i * 2,
+    commonDenialReasons: ["Missing periapical radiograph", "Narrative does not establish medical necessity", "Frequency limitation"],
+    requiredDocumentation: ["Pre-operative periapical", "Pulpal and apical diagnosis", "Narrative of necessity"],
+    tips: `${c} typically requests a periapical and a narrative for D3330. Submit the pre-op film with the claim.`,
+  })));
 
   // --- referring dentists ---
   const GP_PRACTICES = ["Lakeside Family Dental", "Nokomis Dental Arts", "Cedar Smiles", "Linden Hills Dental", "Bryn Mawr Dental Group", "Calhoun Family Dentistry", "Edina Dental Care", "Wayzata Smile Studio"];
@@ -244,6 +250,27 @@ async function seed() {
         plan: completed ? `Completed ${proc.desc.toLowerCase()} on tooth ${tooth}.` : `Plan ${proc.desc.toLowerCase()} on tooth ${tooth}.`,
         pulpalDiagnosis: pick(PULPAL), apicalDiagnosis: pick(APICAL),
         diagnosticTests: tests, canals, cdtCodes: [proc.cdt, "D0220"],
+        // Rich clinical structures adopted from the prototype.
+        etiology: { [pick(["caries", "defectiveRestoration", "previousRCT", "crackFracture"])]: true },
+        clinicalFindings: {
+          [pick(["spontaneousPain", "lingeringPainToCold", "painOnBiting"])]: true,
+          [pick(["coldTestLingering", "coldTestNegative"])]: true,
+          [pick(["percussionMild", "percussionModerate"])]: true,
+        },
+        radiographicFindings: { [pick(["apicalRadiolucency", "widenedPDL", "normal"])]: true },
+        prognosis: pick(["Favorable", "Favorable", "Questionable"]),
+        prognosisFactors: completed ? {} : { [pick(["complexAnatomy", "calcifiedCanals", "largeLesion"])]: true },
+        treatmentPerformed: completed ? { rootCanalTherapy: true, temporaryRestoration: true } : {},
+        recommendations: completed ? { crownRecommended: true, followUp6Months: true } : { referToGP: false },
+        procedureDetails: completed ? {
+          rubberDamPlaced: true, anesthesiaAgent: "2% lidocaine 1:100k epi",
+          instrumentSystem: pick(["ProTaper Gold", "WaveOne Gold", "TruNatomy"]),
+          instrumentationType: "Rotary", glidePathEstablished: true,
+          irrigationNaOCl: true, naOClConcentration: pick(["5.25%", "6%"]), irrigationEDTA: true, ultrasonicActivation: true,
+          obturationTechnique: pick(["Warm vertical condensation", "Single cone", "Continuous wave"]),
+          obturationMaterial: pick(["Gutta percha", "Bioceramic coated GP"]), sealerType: pick(["AH Plus", "BC Sealer"]),
+          tempMaterial: pick(["Cavit", "IRM"]), treatmentComplete: true, visitNumber: 1,
+        } : {},
         signedAt: completed ? visitDate : null, signedBy: completed ? provider.id : null,
       }).returning();
 

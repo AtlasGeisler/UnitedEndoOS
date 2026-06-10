@@ -47,6 +47,8 @@ export interface VisitRow {
   note: SoapNoteRow | null;
 }
 
+export type FlagMap = Record<string, boolean>;
+
 export interface SoapNoteRow {
   id: number;
   pulpalDiagnosis: string | null;
@@ -58,6 +60,16 @@ export interface SoapNoteRow {
   canals: CanalDoc[] | null;
   cdtCodes: string[] | null;
   signedAt: string | null;
+  // Rich clinical structures adopted from the prototype.
+  etiology: FlagMap | null;
+  clinicalFindings: FlagMap | null;
+  radiographicFindings: FlagMap | null;
+  treatmentPerformed: FlagMap | null;
+  recommendations: FlagMap | null;
+  prognosis: string | null;
+  prognosisFactors: FlagMap | null;
+  procedureDetails: Record<string, unknown> | null;
+  specialDiagnoses: FlagMap | null;
 }
 
 export interface CanalDoc {

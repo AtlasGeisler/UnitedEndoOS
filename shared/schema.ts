@@ -223,8 +223,65 @@ export const visits = pgTable("visits", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// Per canal documentation lives as structured JSON on the SOAP note: each canal
-// carries a working length, reference, file size, and obturation detail.
+// The structured endodontic note. The rich JSON clinical structures (etiology,
+// graded findings, radiographic findings, procedure detail, special diagnoses,
+// and prognosis factors) are adopted from the EndoSOAP prototype so the cockpit
+// captures the full AAE-aligned record, not just free text.
+export interface EtiologyFlags {
+  caries?: boolean; defectiveRestoration?: boolean; mechanicalExposure?: boolean;
+  directPulpCap?: boolean; indirectPulpCap?: boolean; previousRCT?: boolean;
+  trauma?: boolean; crackFracture?: boolean; resorption?: boolean;
+  periodontal?: boolean; idiopathic?: boolean;
+}
+export interface ClinicalFindingFlags {
+  spontaneousPain?: boolean; lingeringPainToCold?: boolean; lingeringPainToHeat?: boolean;
+  painOnBiting?: boolean; swelling?: boolean; sinusTract?: boolean;
+  coldTestPositive?: boolean; coldTestNegative?: boolean; coldTestLingering?: boolean;
+  heatTestPositive?: boolean; heatTestNegative?: boolean; eptPositive?: boolean; eptNegative?: boolean;
+  percussionNone?: boolean; percussionMild?: boolean; percussionModerate?: boolean; percussionSevere?: boolean;
+  palpationNone?: boolean; palpationMild?: boolean; palpationModerate?: boolean; palpationSevere?: boolean;
+  bitingNone?: boolean; bitingMild?: boolean; bitingModerate?: boolean; bitingSevere?: boolean;
+  mobilityNormal?: boolean; mobilityClass1?: boolean; mobilityClass2?: boolean; mobilityClass3?: boolean;
+  probingNormal?: boolean; probingDeep?: boolean; probingNarrowDefect?: boolean;
+}
+export interface RadiographicFlags {
+  normal?: boolean; apicalRadiolucency?: boolean; lateralRadiolucency?: boolean; furcalRadiolucency?: boolean;
+  widenedPDL?: boolean; calcification?: boolean; caries?: boolean; immatureApex?: boolean;
+  rootFracture?: boolean; previousRCT?: boolean; perforation?: boolean; externalResorption?: boolean;
+  internalResorption?: boolean; missedCanals?: boolean; shortFill?: boolean; lossOfLaminaDura?: boolean;
+}
+export interface TreatmentPerformedFlags {
+  pulpectomy?: boolean; pulpotomy?: boolean; rootCanalTherapy?: boolean; retreatment?: boolean;
+  apicalSurgery?: boolean; incisionAndDrainage?: boolean; calciumHydroxidePlaced?: boolean;
+  temporaryRestoration?: boolean; permanentRestoration?: boolean; emergency?: boolean;
+}
+export interface RecommendationFlags {
+  crownRecommended?: boolean; buildupNeeded?: boolean; postNeeded?: boolean; extractionRecommended?: boolean;
+  monitorOnly?: boolean; referToGP?: boolean; followUp6Months?: boolean; followUp12Months?: boolean;
+  softDiet?: boolean; takeAnalgesics?: boolean; takeAntibiotics?: boolean; warmSaltRinses?: boolean;
+}
+export interface PrognosisFactorFlags {
+  poorCoronal?: boolean; extensiveCaries?: boolean; shortRoots?: boolean; severePeriodontal?: boolean;
+  rootFracture?: boolean; complexAnatomy?: boolean; calcifiedCanals?: boolean; previousFailure?: boolean;
+  largeLesion?: boolean; openApex?: boolean; verticalRootFracture?: boolean; nonRestorableTooth?: boolean;
+}
+export interface ProcedureDetails {
+  anesthesiaAgent?: string; anesthesiaCarpules?: number; rubberDamPlaced?: boolean;
+  instrumentSystem?: string; instrumentationType?: string; glidePathEstablished?: boolean;
+  irrigationNaOCl?: boolean; naOClConcentration?: string; irrigationEDTA?: boolean; irrigationCHX?: boolean;
+  ultrasonicActivation?: boolean;
+  obturationTechnique?: string; obturationMaterial?: string; sealerType?: string;
+  tempMaterial?: string; treatmentComplete?: boolean; visitNumber?: number;
+  separatedInstrument?: boolean; perforation?: boolean; perforationLocation?: string; perforationRepaired?: boolean;
+}
+export interface SpecialDiagnoses {
+  icrPresent?: boolean; icrClass?: string;
+  ecrPresent?: boolean;
+  internalResorptionPresent?: boolean; internalResorptionPerforated?: boolean;
+  densInvaginatusPresent?: boolean; densInvaginatusType?: string;
+  taurodontismPresent?: boolean; dilacerationPresent?: boolean;
+}
+
 export const soapNotes = pgTable("soap_notes", {
   id: serial("id").primaryKey(),
   visitId: integer("visit_id").notNull().references(() => visits.id),
@@ -239,6 +296,16 @@ export const soapNotes = pgTable("soap_notes", {
   diagnosticTests: jsonb("diagnostic_tests"),
   canals: jsonb("canals"),
   cdtCodes: jsonb("cdt_codes"),
+  // Adopted rich clinical structures.
+  etiology: jsonb("etiology").$type<EtiologyFlags>(),
+  clinicalFindings: jsonb("clinical_findings").$type<ClinicalFindingFlags>(),
+  radiographicFindings: jsonb("radiographic_findings").$type<RadiographicFlags>(),
+  treatmentPerformed: jsonb("treatment_performed").$type<TreatmentPerformedFlags>(),
+  recommendations: jsonb("recommendations").$type<RecommendationFlags>(),
+  prognosis: text("prognosis"),
+  prognosisFactors: jsonb("prognosis_factors").$type<PrognosisFactorFlags>(),
+  procedureDetails: jsonb("procedure_details").$type<ProcedureDetails>(),
+  specialDiagnoses: jsonb("special_diagnoses").$type<SpecialDiagnoses>(),
   aiDraft: boolean("ai_draft").notNull().default(false),
   signedAt: timestamp("signed_at"),
   signedBy: integer("signed_by").references(() => users.id),
@@ -414,11 +481,18 @@ export const claims = pgTable("claims", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Carrier intelligence adopted from the prototype: approval and denial rates,
+// processing time, common denial reasons, and the documentation a carrier wants.
 export const carrierPatterns = pgTable("carrier_patterns", {
   id: serial("id").primaryKey(),
-  carrier: text("carrier").notNull(),
-  note: text("note"),
-  patternJson: jsonb("pattern_json"),
+  carrierName: text("carrier_name").notNull(),
+  procedureCode: text("procedure_code"),
+  approvalRate: integer("approval_rate"),
+  denialRate: integer("denial_rate"),
+  avgProcessingDays: integer("avg_processing_days"),
+  commonDenialReasons: jsonb("common_denial_reasons").$type<string[]>(),
+  requiredDocumentation: jsonb("required_documentation").$type<string[]>(),
+  tips: text("tips"),
 });
 
 export const insuranceNarratives = pgTable("insurance_narratives", {

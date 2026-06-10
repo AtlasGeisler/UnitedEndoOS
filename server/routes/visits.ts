@@ -108,6 +108,16 @@ export function registerVisitRoutes(app: Express) {
       diagnosticTests: f.diagnosticTests ?? note.diagnosticTests,
       canals: f.canals ?? note.canals,
       cdtCodes: f.cdtCodes ?? note.cdtCodes,
+      // Rich clinical structures adopted from the prototype.
+      etiology: f.etiology ?? note.etiology,
+      clinicalFindings: f.clinicalFindings ?? note.clinicalFindings,
+      radiographicFindings: f.radiographicFindings ?? note.radiographicFindings,
+      treatmentPerformed: f.treatmentPerformed ?? note.treatmentPerformed,
+      recommendations: f.recommendations ?? note.recommendations,
+      prognosis: f.prognosis ?? note.prognosis,
+      prognosisFactors: f.prognosisFactors ?? note.prognosisFactors,
+      procedureDetails: f.procedureDetails ?? note.procedureDetails,
+      specialDiagnoses: f.specialDiagnoses ?? note.specialDiagnoses,
       aiDraft: f.aiDraft ?? note.aiDraft,
     }).where(eq(soapNotes.id, note.id)).returning();
     res.json({ note: updated });

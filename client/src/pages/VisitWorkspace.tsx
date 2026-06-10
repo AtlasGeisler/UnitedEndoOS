@@ -9,10 +9,11 @@ import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Filmstrip } from "@/components/imaging/Filmstrip";
 import { ImageAnalysis } from "@/components/imaging/ImageAnalysis";
+import { StructuredFindings } from "@/components/clinical/StructuredFindings";
 import {
-  PULPAL_DX, APICAL_DX, DIAGNOSTIC_TESTS, CANAL_PRESETS, FILE_SIZES, OBTURATIONS, CDT_OPTIONS,
+  CANAL_PRESETS, FILE_SIZES, OBTURATIONS, CDT_OPTIONS, suggestCdt,
 } from "@/lib/endo";
-import { SEQUENCE_LABELS, type StudyRow, type CanalDoc } from "@/lib/clinical-types";
+import { SEQUENCE_LABELS, type StudyRow, type CanalDoc, type FlagMap } from "@/lib/clinical-types";
 import { cn } from "@/lib/utils";
 
 interface VisitDetail {
@@ -35,6 +36,15 @@ interface NoteState {
   diagnosticTests: Record<string, string> | null;
   canals: CanalDoc[] | null;
   cdtCodes: string[] | null;
+  etiology: FlagMap | null;
+  clinicalFindings: FlagMap | null;
+  radiographicFindings: FlagMap | null;
+  treatmentPerformed: FlagMap | null;
+  recommendations: FlagMap | null;
+  prognosis: string | null;
+  prognosisFactors: FlagMap | null;
+  procedureDetails: Record<string, unknown> | null;
+  specialDiagnoses: FlagMap | null;
 }
 
 // The Visit Workspace clinical cockpit. Left: SOAP and structured findings.
@@ -161,31 +171,13 @@ export function VisitWorkspace() {
               <Sparkles className="h-3.5 w-3.5" /> AI draft, provider review required. Edit before signing.
             </div>
           )}
-          <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-content-soft">Diagnosis</h3>
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <Select label="Pulpal" value={note.pulpalDiagnosis ?? ""} options={PULPAL_DX} disabled={locked} onChange={(v) => { update({ pulpalDiagnosis: v }); commit({ pulpalDiagnosis: v }); }} />
-            <Select label="Apical" value={note.apicalDiagnosis ?? ""} options={APICAL_DX} disabled={locked} onChange={(v) => { update({ apicalDiagnosis: v }); commit({ apicalDiagnosis: v }); }} />
-          </div>
+          <StructuredFindings
+            value={note}
+            locked={locked}
+            onCommit={(patch) => { update(patch as Partial<NoteState>); commit(patch as Partial<NoteState>); }}
+          />
 
-          <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-content-soft">Diagnostic tests</h3>
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            {DIAGNOSTIC_TESTS.map((t) => (
-              <Select
-                key={t.key}
-                label={t.label}
-                value={(note.diagnosticTests ?? {})[t.key] ?? ""}
-                options={t.options}
-                disabled={locked}
-                onChange={(v) => {
-                  const diagnosticTests = { ...(note.diagnosticTests ?? {}), [t.key]: v };
-                  update({ diagnosticTests });
-                  commit({ diagnosticTests });
-                }}
-              />
-            ))}
-          </div>
-
-          <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-content-soft">SOAP note</h3>
+          <h3 className="mb-2 mt-4 text-[13px] font-semibold uppercase tracking-wide text-content-soft">SOAP note</h3>
           {(["subjective", "objective", "assessment", "plan"] as const).map((f) => (
             <Field key={f} label={f[0].toUpperCase() + f.slice(1)} value={(note[f] as string) ?? ""} disabled={locked} onChange={(v) => update({ [f]: v } as Partial<NoteState>)} onBlur={(v) => commit({ [f]: v } as Partial<NoteState>)} />
           ))}
@@ -227,7 +219,19 @@ export function VisitWorkspace() {
             ))}
           </div>
 
-          <h3 className="mb-2 mt-5 text-[13px] font-semibold uppercase tracking-wide text-content-soft">CDT codes</h3>
+          <div className="mb-2 mt-5 flex items-center justify-between">
+            <h3 className="text-[13px] font-semibold uppercase tracking-wide text-content-soft">CDT codes</h3>
+            {!locked && (
+              <Button variant="subtle" size="sm" onClick={() => {
+                const suggested = suggestCdt(data.visit.toothNumber, (note.treatmentPerformed ?? {}) as { retreatment?: boolean; apicalSurgery?: boolean });
+                const cdtCodes = [...new Set([...(note.cdtCodes ?? []), ...suggested])];
+                update({ cdtCodes });
+                commit({ cdtCodes });
+              }}>
+                <Sparkles className="h-3.5 w-3.5 text-endo" /> Suggest
+              </Button>
+            )}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {CDT_OPTIONS.map((c) => {
               const on = (note.cdtCodes ?? []).includes(c.code);

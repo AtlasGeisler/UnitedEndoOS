@@ -228,3 +228,31 @@ a couple of minutes, review the huddle, open a patient to a wall of synthetic
 radiographs, compare two films, document a complete RCT with an AI drafted and
 approved note, and send the referral report, in an interface a Mac user would
 recognize as native.
+
+## Deep merge with the EndoSOAP prototype (2026-06-09)
+
+The original EndoSOAP prototype (the source of the 36-table schema) was provided
+as a zip. UnitedEndoOS already recreated its tables and added the image-first
+layer the prototype lacks, so the merge adopted the prototype's deeper clinical
+detail field by field, preserving the image-first architecture.
+
+What changed:
+
+- The SOAP note schema gained the prototype's rich, typed JSON structures:
+  etiology, graded clinical findings (cold, EPT, percussion, palpation, mobility,
+  probing), radiographic findings, treatment performed, recommendations,
+  prognosis and prognosis factors, the full RCT procedure detail (anesthetic,
+  instrument system, irrigation, obturation technique, material, sealer, temp,
+  complications), and special diagnoses (ICR, ECR, internal resorption, dens
+  invaginatus, taurodontism, dilaceration).
+- The Visit Workspace structured findings were rebuilt as data-driven tabs,
+  Findings, Diagnosis, Procedure, and Prognosis, with toggle chips and procedure
+  selects, plus a CDT suggest button driven by tooth and treatment.
+- The CDT catalog was expanded to the full D3000 series with fees, and carrier
+  patterns gained approval and denial rates, processing time, common denial
+  reasons, and required documentation.
+- The seed populates the rich structures on completed visits.
+
+Verified: tsc clean, production build green, all seven smoke tests pass, the AI
+features still run on Claude, and screenshots show the Findings and Procedure
+tabs with the full vocabulary.
