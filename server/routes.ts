@@ -2,11 +2,15 @@ import type { Express } from "express";
 import { db } from "./db";
 import { clinics } from "../shared/schema";
 import { registerAuthRoutes, requireAuth } from "./auth";
+import { registerPatientRoutes } from "./routes/patients";
+import { registerImageRoutes } from "./routes/images";
 
-// The API surface. Phase 0 covers auth and the clinic list that powers the
-// location switcher. Each later phase mounts its own router here.
+// The API surface. Each phase mounts its own router here. Phase 0 covers auth
+// and clinics, Phase 1 adds patients and the imaging layer.
 export function registerRoutes(app: Express) {
   registerAuthRoutes(app);
+  registerPatientRoutes(app);
+  registerImageRoutes(app);
 
   app.get("/api/clinics", requireAuth, async (_req, res) => {
     const rows = await db.select().from(clinics);

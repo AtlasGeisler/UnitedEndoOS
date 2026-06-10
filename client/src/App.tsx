@@ -2,6 +2,8 @@ import { Route, Switch } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { Login } from "@/pages/Login";
+import { Patients } from "@/pages/Patients";
+import { PatientChart } from "@/pages/PatientChart";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { MODULES } from "@/modules";
 
@@ -96,7 +98,10 @@ export function App() {
   return (
     <AppShell>
       <Switch>
-        {MODULES.map((m) => {
+        {/* Phase 1 real pages take precedence over the placeholder routes. */}
+        <Route path="/patients" component={Patients} />
+        <Route path="/patients/:id" component={PatientChart} />
+        {MODULES.filter((m) => m.key !== "patients").map((m) => {
           const meta = MODULE_META[m.key];
           return (
             <Route key={m.key} path={m.path}>
