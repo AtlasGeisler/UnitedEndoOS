@@ -4,6 +4,15 @@ import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { attachClient } from "./vite";
 
+// Load .env if present, so ANTHROPIC_API_KEY (or OPENAI_API_KEY) is picked up by
+// the AI provider abstraction. Node's built-in loader, no dependency. The app
+// still runs with no .env, falling back to the offline mock provider.
+try {
+  process.loadEnvFile(new URL("../.env", import.meta.url));
+} catch {
+  // No .env file, that is fine, the mock provider is used.
+}
+
 const isProd = process.env.NODE_ENV === "production";
 const PORT = Number(process.env.PORT ?? 5173);
 
@@ -30,7 +39,13 @@ async function main() {
   await attachClient(app, isProd);
 
   app.listen(PORT, () => {
+    const aiProvider = process.env.ANTHROPIC_API_KEY
+      ? "anthropic (claude-opus-4-8)"
+      : process.env.OPENAI_API_KEY
+        ? "openai"
+        : "mock (offline)";
     console.log(`UnitedEndoOS listening on http://localhost:${PORT}`);
+    console.log(`AI provider: ${aiProvider}`);
   });
 }
 

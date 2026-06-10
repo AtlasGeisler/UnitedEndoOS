@@ -37,7 +37,10 @@ class AnthropicProvider implements AIProvider {
     });
     if (!res.ok) throw new Error(`Anthropic error ${res.status}`);
     const data = await res.json();
-    return data.content?.[0]?.text ?? "";
+    // Find the text block. With thinking omitted on Opus 4.8 the text block is
+    // first, but search rather than assume, to stay robust across models.
+    const block = (data.content ?? []).find((b: { type: string }) => b.type === "text");
+    return block?.text ?? "";
   }
 }
 
