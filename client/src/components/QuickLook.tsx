@@ -62,8 +62,8 @@ export function QuickLookProvider({ children }: { children: React.ReactNode }) {
       else if (e.key === "ArrowRight" || e.key.toLowerCase() === "k") step(1);
       else if (e.key === "ArrowLeft" || e.key.toLowerCase() === "j") step(-1);
       else if (e.key === "0") reset();
-      else if (e.key === "+" || e.key === "=") setT((p) => ({ ...p, zoom: Math.min(6, p.zoom + 0.25) }));
-      else if (e.key === "-") setT((p) => ({ ...p, zoom: Math.max(1, p.zoom - 0.25) }));
+      else if (e.key === "+" || e.key === "=") setT((p) => ({ ...p, zoom: Math.min(3, p.zoom + 0.25) }));
+      else if (e.key === "-") setT((p) => ({ ...p, zoom: Math.max(0.1, p.zoom - 0.25) }));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -132,7 +132,7 @@ export function QuickLookProvider({ children }: { children: React.ReactNode }) {
             {/* Stage */}
             <div className="relative flex flex-1 items-center justify-center overflow-hidden"
               onClick={(e) => { if (e.target === e.currentTarget && !measure) close(); }}
-              onWheel={(e) => setT((p) => ({ ...p, zoom: Math.min(6, Math.max(1, p.zoom - e.deltaY * 0.002)) }))}
+              onWheel={(e) => setT((p) => ({ ...p, zoom: Math.min(3, Math.max(0.1, p.zoom - e.deltaY * 0.002)) }))}
               onMouseDown={(e) => { if (!measure && compare === "off") drag.current = { x: e.clientX, y: e.clientY, ox: t.x, oy: t.y }; }}
               onMouseMove={(e) => { if (drag.current) setT((p) => ({ ...p, x: drag.current!.ox + (e.clientX - drag.current!.x), y: drag.current!.oy + (e.clientY - drag.current!.y) })); }}
               onMouseUp={() => (drag.current = null)} onMouseLeave={() => (drag.current = null)}>
@@ -176,9 +176,9 @@ export function QuickLookProvider({ children }: { children: React.ReactNode }) {
 
             {/* Controls */}
             <div className="flex flex-wrap items-center justify-center gap-4 px-4 py-3 text-white">
-              <Tool icon={ZoomOut} onClick={() => setT((p) => ({ ...p, zoom: Math.max(1, p.zoom - 0.25) }))} />
+              <Tool icon={ZoomOut} onClick={() => setT((p) => ({ ...p, zoom: Math.max(0.1, p.zoom - 0.25) }))} />
               <span className="w-10 text-center text-[12px] tnum">{Math.round(t.zoom * 100)}%</span>
-              <Tool icon={ZoomIn} onClick={() => setT((p) => ({ ...p, zoom: Math.min(6, p.zoom + 0.25) }))} />
+              <Tool icon={ZoomIn} onClick={() => setT((p) => ({ ...p, zoom: Math.min(3, p.zoom + 0.25) }))} />
               <Tool icon={RotateCw} onClick={() => setT((p) => ({ ...p, rotate: p.rotate + 90 }))} />
               <Tool icon={FlipHorizontal2} onClick={() => setT((p) => ({ ...p, flip: p.flip * -1 }))} />
               <Slider icon={Sun} value={t.brightness} min={40} max={180} onChange={(v) => setT((p) => ({ ...p, brightness: v }))} />
