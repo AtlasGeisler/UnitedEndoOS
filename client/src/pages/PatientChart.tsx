@@ -7,11 +7,12 @@ import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { age, patientAlerts, type PatientRow, type StudyRow, type VisitRow } from "@/lib/clinical-types";
 import { useSelection, studyToSelection } from "@/lib/selection";
+import { Avatar } from "@/components/Avatar";
 import { ImagingGrid } from "@/components/imaging/ImagingGrid";
 import { Filmstrip } from "@/components/imaging/Filmstrip";
 import { ToothChart } from "@/components/imaging/ToothChart";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
-import { ClipboardSignature, CreditCard, FileText, MessageSquare } from "lucide-react";
+import { ClipboardSignature, CreditCard, FileText, MessageSquare, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ApptRow { id: number; startsAt: string; status: string; operatory: string | null; confirmed: boolean; typeName: string | null }
@@ -80,7 +81,7 @@ export function PatientChart() {
       title: `${pt.firstName} ${pt.lastName}`,
       subtitle: `${pt.sex ?? ""}${pt.city ? ` · ${pt.city}, ${pt.state ?? ""}` : ""}`.trim(),
       alert: alerts.length ? alerts.join(" · ") : undefined,
-      thumbAssetId: pt.latestThumbAssetId ?? null,
+      avatar: { firstName: pt.firstName, lastName: pt.lastName },
       fields,
       href: `/patients/${pt.id}`,
       hrefLabel: "Open chart",
@@ -162,20 +163,23 @@ export function PatientChart() {
             <ChevronLeft className="h-3.5 w-3.5" /> Patients
           </span>
         </Link>
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="text-[19px] font-semibold">{p.firstName} {p.lastName}</h1>
-          <span className="text-[13px] text-content-soft">
-            Age {age(p.dateOfBirth)}, {p.sex}, DOB {format(new Date(p.dateOfBirth), "MMM d, yyyy")}
-          </span>
-          <span className="text-[13px] text-content-soft">{p.insuranceCarrier}</span>
-          {detail.data.referrer && (
+        <div className="flex items-start gap-3">
+          <Avatar firstName={p.firstName} lastName={p.lastName} size={44} className="mt-0.5" />
+          <div className="flex flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="text-[19px] font-semibold">{p.firstName} {p.lastName}</h1>
             <span className="text-[13px] text-content-soft">
-              Referred by {detail.data.referrer.fullName}, {detail.data.referrer.practiceName}
+              Age {age(p.dateOfBirth)}, {p.sex}, DOB {format(new Date(p.dateOfBirth), "MMM d, yyyy")}
             </span>
-          )}
-          <span className="ml-auto rounded-full bg-endo/12 px-2.5 py-0.5 text-[12px] font-medium text-endo tnum">
-            {detail.data.imageCount} images
-          </span>
+            <span className="text-[13px] text-content-soft">{p.insuranceCarrier}</span>
+            {detail.data.referrer && (
+              <span className="text-[13px] text-content-soft">
+                Referred by {detail.data.referrer.fullName}, {detail.data.referrer.practiceName}
+              </span>
+            )}
+            <span className="ml-auto rounded-full bg-endo/12 px-2.5 py-0.5 text-[12px] font-medium text-endo tnum">
+              {detail.data.imageCount} images
+            </span>
+          </div>
         </div>
 
         {/* Quick actions, the chart is the hub */}
@@ -345,6 +349,8 @@ function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail:
           </Card>
         </div>
 
+        <BenefitsCard patientId={patientId} />
+
         {/* Recent visits, each opens the cockpit */}
         <div className="mt-4 rounded-card border border-hairline bg-surface p-5 shadow-card">
           <h3 className="mb-3 text-[14px] font-semibold">Recent visits</h3>
@@ -488,6 +494,56 @@ function PatientBilling({ patientId }: { patientId: number }) {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+interface Benefits {
+  carrier: string; planMatched: boolean; coveragePercent: number;
+  annualMaximumCents: number; usedCents: number; remainingMaxCents: number;
+  deductibleCents: number; deductibleMetCents: number; remainingDeductibleCents: number;
+}
+
+// Insurance benefits at a glance: remaining annual maximum and deductible drawn
+// from the patient's matched plan, less what claims have paid this year.
+function BenefitsCard({ patientId }: { patientId: number }) {
+  const money = (c: number) => `$${(c / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const q = useQuery({
+    queryKey: ["/api/patients", patientId, "benefits"],
+    queryFn: () => apiRequest<{ benefits: Benefits }>("GET", `/api/patients/${patientId}/benefits`),
+  });
+  const b = q.data?.benefits;
+  if (!b) return null;
+  const maxPct = b.annualMaximumCents ? Math.min(100, Math.round((b.usedCents / b.annualMaximumCents) * 100)) : 0;
+  const dedPct = b.deductibleCents ? Math.min(100, Math.round((b.deductibleMetCents / b.deductibleCents) * 100)) : 0;
+  const bar = (label: string, used: number, total: number, remaining: number, usedLabel: string, pct: number) => (
+    <div>
+      <div className="flex items-baseline justify-between text-[12px]">
+        <span className="font-medium">{label}</span>
+        <span className="tnum font-medium text-endo">{money(remaining)} left</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
+        <div className="h-full rounded-full bg-endo" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-content-soft tnum">
+        <span>{money(used)} {usedLabel}</span>
+        <span>{money(total)} total</span>
+      </div>
+    </div>
+  );
+  return (
+    <div className="mt-4 rounded-card border border-hairline bg-surface p-5 shadow-card">
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[14px] font-semibold">
+        <ShieldCheck className="h-4 w-4 text-endo" /> Insurance benefits
+        <span className="text-[12px] font-normal text-content-soft">
+          {b.carrier} · {b.coveragePercent}% endodontics · {b.planMatched ? "plan on file" : "estimated"}
+        </span>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2">
+        {bar("Annual maximum", b.usedCents, b.annualMaximumCents, b.remainingMaxCents, "used", maxPct)}
+        {bar("Deductible", b.deductibleMetCents, b.deductibleCents, b.remainingDeductibleCents, "met", dedPct)}
+      </div>
+      <div className="mt-2 text-[11px] text-content-soft">Estimated from claims posted this calendar year.</div>
     </div>
   );
 }

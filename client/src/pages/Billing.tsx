@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CreditCard, Send, CheckCircle2, ShieldCheck, RefreshCw, X, Search, Layers } from "lucide-react";
+import { CreditCard, Send, CheckCircle2, ShieldCheck, RefreshCw, X, Search, Layers, History, ArrowRight } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,8 +26,12 @@ export function Billing() {
     onSuccess: (r: any, v) => { queryClient.invalidateQueries({ queryKey: ["/api/claims"] }); if (v.action === "post-era") setToast(`ERA posted: insurance paid ${money(r.insurancePaid)}, patient portion ${money(r.patientPortion)}`); },
   });
 
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const counts = { total: claims.length, paid: claims.filter((c) => c.status === "paid").length, open: claims.filter((c) => c.status === "draft" || c.status === "submitted").length };
   const collected = claims.reduce((m, c) => m + c.paidCents, 0);
+  const PIPELINE = ["draft", "submitted", "accepted", "paid", "denied"];
+  const byStatus = (s: string) => claims.filter((c) => c.status === s).length;
+  const shown = statusFilter === "all" ? claims : claims.filter((c) => c.status === statusFilter);
 
   return (
     <div className="flex h-full flex-col">
@@ -45,6 +49,14 @@ export function Billing() {
 
           {toast && <div className="mb-4 rounded-lg border border-endo/30 bg-endo/8 px-3 py-2 text-[13px] text-endo">{toast}</div>}
 
+          {/* Claims pipeline: filter the list by status, counts per stage. */}
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            <PipeTab label="All" count={claims.length} active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
+            {PIPELINE.map((s) => (
+              <PipeTab key={s} label={s} count={byStatus(s)} active={statusFilter === s} onClick={() => setStatusFilter(s)} />
+            ))}
+          </div>
+
           <div className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
             <table className="w-full text-[13px]">
               <thead>
@@ -58,7 +70,10 @@ export function Billing() {
                 </tr>
               </thead>
               <tbody>
-                {claims.slice(0, 40).map((c) => (
+                {shown.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-6 text-center text-content-soft">No claims in this stage.</td></tr>
+                )}
+                {shown.slice(0, 40).map((c) => (
                   <tr key={c.id} className="border-b border-hairline last:border-0 hover:bg-[var(--surface-2)]">
                     <td className="px-4 py-2 font-medium">{c.patientName}</td>
                     <td className="px-4 py-2 text-content-soft">{c.carrier}</td>
@@ -81,10 +96,54 @@ export function Billing() {
             </table>
           </div>
 
+          <ClaimHistory />
           <PaymentTracer />
         </div>
       </div>
       {bulk && <BulkPaymentDialog onClose={() => setBulk(false)} onDone={(n, t) => { setBulk(false); setToast(`Bulk payment posted: ${n} claims, ${money(t)} applied.`); queryClient.invalidateQueries({ queryKey: ["/api/claims"] }); }} />}
+    </div>
+  );
+}
+
+// A single stage in the claims pipeline, with its count.
+function PipeTab({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] capitalize",
+        active ? "border-endo bg-endo/10 text-endo" : "border-hairline text-content-soft hover:border-endo hover:text-endo",
+      )}
+    >
+      {label}
+      <span className={cn("rounded-full px-1.5 text-[11px] tnum", active ? "bg-endo/15" : "bg-[var(--surface-2)]")}>{count}</span>
+    </button>
+  );
+}
+
+interface ClaimEvent { id: number; claimId: number; fromStatus: string | null; toStatus: string; note: string | null; patientName: string; createdAt: string }
+
+// The claim status-change feed: who moved which claim to which stage, and when.
+function ClaimHistory() {
+  const { data } = useQuery({ queryKey: ["/api/claims/events"], queryFn: () => apiRequest<{ events: ClaimEvent[] }>("GET", "/api/claims/events") });
+  const events = data?.events ?? [];
+  if (!events.length) return null;
+  return (
+    <div className="mt-6 rounded-card border border-hairline bg-surface p-4 shadow-card">
+      <div className="mb-2 flex items-center gap-2 text-[14px] font-semibold"><History className="h-4 w-4 text-endo" /> Recent status changes</div>
+      <div className="max-h-72 overflow-y-auto">
+        {events.map((e) => (
+          <div key={e.id} className="flex items-center gap-2 border-b border-hairline py-1.5 text-[12px] last:border-0">
+            <span className="shrink-0 font-medium">{e.patientName}</span>
+            <span className="flex shrink-0 items-center gap-1 text-content-soft">
+              {e.fromStatus && <><span className="capitalize">{e.fromStatus}</span><ArrowRight className="h-3 w-3" /></>}
+              <span className={cn("rounded-full px-1.5 py-0.5 capitalize", STATUS_TONE[e.toStatus])}>{e.toStatus}</span>
+            </span>
+            {e.note && <span className="truncate text-content-soft">{e.note}</span>}
+            <span className="ml-auto shrink-0 text-content-soft tnum">{new Date(e.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

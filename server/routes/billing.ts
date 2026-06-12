@@ -5,7 +5,7 @@ import { db } from "../db";
 import { requireAuth, requireRole } from "../auth";
 import { audit } from "../audit";
 import { now } from "../clock";
-import { claims, invoices, invoiceItems, payments, patients, visits, paymentBatches } from "../../shared/schema";
+import { claims, claimEvents, invoices, invoiceItems, payments, patients, visits, paymentBatches, insuranceProfiles } from "../../shared/schema";
 
 // RCM lite. Eligibility, claims from draft to paid with auto posted ERAs,
 // statements, patient payments, and pay by text, all on a mock gateway and a
@@ -26,6 +26,13 @@ function eligibilityFor(carrier: string | null) {
   };
 }
 
+const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+// Record a claim status transition for the history feed.
+async function logClaimEvent(claimId: number, fromStatus: string | null, toStatus: string, note: string | null, userId: number | null) {
+  await db.insert(claimEvents).values({ claimId, fromStatus, toStatus, note, userId });
+}
+
 export function registerBillingRoutes(app: Express) {
   // Claims list, scoped, with patient names.
   app.get("/api/claims", requireAuth, async (req, res) => {
@@ -35,6 +42,20 @@ export function registerBillingRoutes(app: Express) {
     const pIn = new Set(pts.map((p) => p.id));
     const pName = new Map(pts.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
     res.json({ claims: rows.filter((c) => pIn.has(c.patientId)).map((c) => ({ ...c, patientName: pName.get(c.patientId) })) });
+  });
+
+  // The claim status-change history feed, scoped to the user's clinics.
+  app.get("/api/claims/events", requireAuth, async (req, res) => {
+    const scope = req.user!.clinicIds;
+    const pts = await db.select().from(patients).where(inArray(patients.clinicId, scope));
+    const pName = new Map(pts.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+    const claimToPatient = new Map((await db.select().from(claims)).map((c) => [c.id, c.patientId]));
+    const rows = await db.select().from(claimEvents).orderBy(desc(claimEvents.createdAt)).limit(40);
+    const events = rows
+      .map((e) => ({ ...e, patientName: pName.get(claimToPatient.get(e.claimId) ?? -1) }))
+      .filter((e) => e.patientName)
+      .slice(0, 20);
+    res.json({ events });
   });
 
   // Claims a bulk payment can be applied to: submitted or accepted, not yet paid.
@@ -76,6 +97,7 @@ export function registerBillingRoutes(app: Express) {
       const insurancePaid = Math.round((claim.totalCents * elig.coveragePercent) / 100);
       const patientPortion = claim.totalCents - insurancePaid;
       await db.update(claims).set({ status: "paid", paidCents: insurancePaid, resolvedAt: now() }).where(eq(claims.id, id));
+      await logClaimEvent(id, claim.status, "paid", `Bulk payment ${name}${checkNumber ? ` #${checkNumber}` : ""}, ${formatCents(insurancePaid)}`, req.user!.id);
       await db.insert(payments).values({ patientId: claim.patientId, invoiceId: claim.invoiceId, amountCents: insurancePaid, method: "insurance", reference: `${name}${checkNumber ? ` #${checkNumber}` : ""}`, batchId: batch.id });
       await db.update(patients).set({ balanceCents: (patient.balanceCents ?? 0) + patientPortion }).where(eq(patients.id, patient.id));
       total += insurancePaid; applied++;
@@ -99,6 +121,50 @@ export function registerBillingRoutes(app: Express) {
     res.json({ eligibility: eligibilityFor(patient.insuranceCarrier) });
   });
 
+  // Insurance benefits at a glance: the patient's plan limits matched from the
+  // insurance profiles, less what has been used this calendar year, so the front
+  // desk sees remaining annual maximum and deductible before quoting a case.
+  app.get("/api/patients/:id/benefits", requireAuth, async (req, res) => {
+    const patient = await db.query.patients.findFirst({ where: eq(patients.id, Number(req.params.id)) });
+    if (!patient || !req.user!.clinicIds.includes(patient.clinicId)) return res.status(404).json({ error: "Not found" });
+
+    // Match a configured plan by carrier within the patient's clinic, else fall
+    // back to the simulated eligibility defaults.
+    const profile = patient.insuranceCarrier
+      ? await db.query.insuranceProfiles.findFirst({
+          where: and(eq(insuranceProfiles.clinicId, patient.clinicId), eq(insuranceProfiles.carrier, patient.insuranceCarrier)),
+        })
+      : null;
+    const elig = eligibilityFor(patient.insuranceCarrier);
+    const annualMaximumCents = profile?.annualMaximumCents ?? elig.annualMaximumCents;
+    const deductibleCents = profile?.deductibleCents ?? elig.deductibleCents;
+    const coveragePercent = profile?.defaultCoveragePercent ?? elig.coveragePercent;
+
+    // Insurance paid for this patient in the current calendar year.
+    const yearStart = new Date(now().getFullYear(), 0, 1);
+    const paidRows = await db.select().from(claims).where(eq(claims.patientId, patient.id));
+    const usedCents = paidRows
+      .filter((c) => c.status === "paid" && c.resolvedAt && new Date(c.resolvedAt) >= yearStart)
+      .reduce((m, c) => m + (c.paidCents ?? 0), 0);
+    const remainingMaxCents = Math.max(0, annualMaximumCents - usedCents);
+    // Once insurance has paid anything this year the deductible is considered met.
+    const deductibleMetCents = usedCents > 0 ? deductibleCents : 0;
+
+    res.json({
+      benefits: {
+        carrier: patient.insuranceCarrier ?? "Self pay",
+        planMatched: !!profile,
+        coveragePercent,
+        annualMaximumCents,
+        usedCents,
+        remainingMaxCents,
+        deductibleCents,
+        deductibleMetCents,
+        remainingDeductibleCents: Math.max(0, deductibleCents - deductibleMetCents),
+      },
+    });
+  });
+
   // Create a claim from a visit's invoice.
   app.post("/api/claims", requireAuth, async (req, res) => {
     const visitId = Number(req.body?.visitId);
@@ -111,6 +177,7 @@ export function registerBillingRoutes(app: Express) {
       patientId: visit.patientId, visitId, invoiceId: invoice.id, carrier: patient?.insuranceCarrier,
       totalCents: invoice.totalCents, status: "draft",
     }).returning();
+    await logClaimEvent(row.id, null, "draft", "Claim created", req.user!.id);
     res.json({ claim: row });
   });
 
@@ -119,6 +186,7 @@ export function registerBillingRoutes(app: Express) {
     const claim = await db.query.claims.findFirst({ where: eq(claims.id, id) });
     if (!claim) return res.status(404).json({ error: "Not found" });
     const [row] = await db.update(claims).set({ status: "submitted", submittedAt: now(), submissionCount: (claim.submissionCount ?? 0) + 1 }).where(eq(claims.id, id)).returning();
+    await logClaimEvent(id, claim.status, "submitted", "Submitted to clearinghouse", req.user!.id);
     await audit(req, { action: "submit_claim", entityType: "claim", entityId: id });
     res.json({ claim: row });
   });
@@ -133,6 +201,7 @@ export function registerBillingRoutes(app: Express) {
       status: "submitted", preAuthNumber, submittedAt: now(), resolvedAt: null,
       submissionCount: (claim.submissionCount ?? 0) + 1,
     }).where(eq(claims.id, id)).returning();
+    await logClaimEvent(id, claim.status, "submitted", `Resubmitted${preAuthNumber ? ` with pre-auth ${preAuthNumber}` : ""} (attempt ${row.submissionCount})`, req.user!.id);
     await audit(req, { action: "resubmit_claim", entityType: "claim", entityId: id, detail: { preAuthNumber, attempt: row.submissionCount } });
     res.json({ claim: row });
   });
@@ -148,6 +217,7 @@ export function registerBillingRoutes(app: Express) {
     const insurancePaid = Math.round((claim.totalCents * elig.coveragePercent) / 100);
     const patientPortion = claim.totalCents - insurancePaid;
     const [row] = await db.update(claims).set({ status: "paid", paidCents: insurancePaid, resolvedAt: now() }).where(eq(claims.id, id)).returning();
+    await logClaimEvent(id, claim.status, "paid", `ERA auto-posted, insurance paid ${formatCents(insurancePaid)}, patient portion ${formatCents(patientPortion)}`, req.user!.id);
     await db.insert(payments).values({ patientId: claim.patientId, invoiceId: claim.invoiceId, amountCents: insurancePaid, method: "insurance", reference: `ERA auto-post, ${elig.carrier}` });
     if (patient) await db.update(patients).set({ balanceCents: (patient.balanceCents ?? 0) + patientPortion }).where(eq(patients.id, patient.id));
     await audit(req, { action: "post_era", entityType: "claim", entityId: id, detail: { insurancePaid, patientPortion } });

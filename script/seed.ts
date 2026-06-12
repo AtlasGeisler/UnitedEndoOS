@@ -78,7 +78,7 @@ async function clearAll() {
     s.imageAnnotations, s.imageComparisons, s.imageAssets, s.imageStudies,
     s.mountInstances, s.messages, s.conversations,
     // Children of invoices (payments, claims, items) must clear before invoices.
-    s.payments, s.paymentBatches, s.claims, s.invoiceItems, s.invoices,
+    s.payments, s.paymentBatches, s.claimEvents, s.claims, s.invoiceItems, s.invoices,
     s.insuranceNarratives, s.referralReports, s.soapNotes,
     s.treatmentPlans, s.activityLogs, s.visits, s.appointments,
     s.reportDeliveryLog, s.referralStatusHistory, s.crmAlerts, s.touchpoints,
@@ -332,13 +332,25 @@ async function seed() {
           { invoiceId: inv.id, cdtCode: "D0220", description: "Periapical radiograph", feeCents: 3500 },
         ]);
         const claimStatus = pick(["draft", "submitted", "accepted", "paid", "denied"]);
-        await db.insert(s.claims).values({
+        const insPaid = Math.floor(lineFee * 0.6);
+        const resolvedAt = claimStatus === "paid" || claimStatus === "denied" ? new Date(visitDate.getTime() + 14 * 86400000) : null;
+        const [claimRow] = await db.insert(s.claims).values({
           patientId: patient.id, visitId: visit.id, invoiceId: inv.id, carrier: patient.insuranceCarrier,
-          totalCents: lineFee + 3500, paidCents: claimStatus === "paid" ? Math.floor(lineFee * 0.6) : 0,
+          totalCents: lineFee + 3500, paidCents: claimStatus === "paid" ? insPaid : 0,
           status: claimStatus, submittedAt: claimStatus === "draft" ? null : visitDate,
-          resolvedAt: claimStatus === "paid" || claimStatus === "denied" ? new Date(visitDate.getTime() + 14 * 86400000) : null,
-        });
-        if (claimStatus === "paid") await db.insert(s.payments).values({ patientId: patient.id, invoiceId: inv.id, amountCents: Math.floor(lineFee * 0.6), method: "insurance", reference: "ERA auto-post" });
+          resolvedAt,
+          submissionCount: claimStatus === "draft" ? 0 : 1,
+          denialReason: claimStatus === "denied" ? pick(["Missing periapical radiograph", "Narrative does not establish medical necessity", "Frequency limitation"]) : null,
+        }).returning();
+        // Reconstruct the status history so the claims feed has a trail.
+        const submitAt = new Date(visitDate.getTime() + 86400000);
+        const events: { from: string | null; to: string; note: string | null; at: Date }[] = [{ from: null, to: "draft", note: "Claim created", at: visitDate }];
+        if (claimStatus !== "draft") events.push({ from: "draft", to: "submitted", note: "Submitted to clearinghouse", at: submitAt });
+        if (claimStatus === "accepted") events.push({ from: "submitted", to: "accepted", note: "Accepted by payer", at: new Date(submitAt.getTime() + 3 * 86400000) });
+        if (claimStatus === "paid") events.push({ from: "submitted", to: "paid", note: `ERA auto-posted, insurance paid $${(insPaid / 100).toFixed(2)}`, at: resolvedAt! });
+        if (claimStatus === "denied") events.push({ from: "submitted", to: "denied", note: "Denied by payer", at: resolvedAt! });
+        for (const e of events) await db.insert(s.claimEvents).values({ claimId: claimRow.id, fromStatus: e.from, toStatus: e.to, note: e.note, userId: provider.id, createdAt: e.at });
+        if (claimStatus === "paid") await db.insert(s.payments).values({ patientId: patient.id, invoiceId: inv.id, amountCents: insPaid, method: "insurance", reference: "ERA auto-post" });
 
         // A referral report back to the GP for some completed cases.
         if (rnd() > 0.4) {

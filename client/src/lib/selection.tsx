@@ -19,6 +19,7 @@ export interface Selection {
   alert?: string;
   fields: InspectorField[];
   thumbAssetId?: number | null;
+  avatar?: { firstName: string; lastName: string };
   href?: string;
   hrefLabel?: string;
   // For images, the lightbox set to open in the full viewer.

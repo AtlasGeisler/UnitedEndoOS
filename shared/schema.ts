@@ -519,6 +519,19 @@ export const claims = pgTable("claims", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// The claim status-change log, the audit trail behind the claims pipeline:
+// every transition (created, submitted, accepted, paid, denied, resubmitted)
+// is recorded with who and when, so the Billing page can show a history feed.
+export const claimEvents = pgTable("claim_events", {
+  id: serial("id").primaryKey(),
+  claimId: integer("claim_id").notNull().references(() => claims.id),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  note: text("note"),
+  userId: integer("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Insurance profiles, adopted from EndoVision: a carrier and employer plan with
 // coverage percentages, deductibles (a default plus advanced by category and by
 // code), and an annual maximum. Per-code coverage exceptions live in their own

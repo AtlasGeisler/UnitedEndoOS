@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Info, X, ArrowRight, Maximize2, User, Image as ImageIcon, CalendarDays, AlertTriangle } from "lucide-react";
 import { useSelection } from "@/lib/selection";
 import { useQuickLook } from "@/components/QuickLook";
+import { Avatar } from "@/components/Avatar";
 
 // The right-hand Inspector, the contextual Info panel. It reflects the shared
 // selection: pick a patient, image, or appointment anywhere in the app and its
@@ -61,6 +62,12 @@ export function Inspector({ open }: { open: boolean }) {
               </div>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+                {/* Patient avatar monogram, the synthetic headshot. */}
+                {selection.avatar && (
+                  <div className="mb-3 flex justify-center">
+                    <Avatar firstName={selection.avatar.firstName} lastName={selection.avatar.lastName} size={72} />
+                  </div>
+                )}
                 {/* Thumbnail, when the selection has a preview. */}
                 {selection.thumbAssetId != null && (
                   <div className="mb-3 overflow-hidden rounded-card border border-hairline bg-clay-900">
