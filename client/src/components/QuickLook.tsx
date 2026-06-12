@@ -94,10 +94,12 @@ export function QuickLookProvider({ children }: { children: React.ReactNode }) {
     setMeasure(false);
   };
 
+  // The image fits the screen by default (object-contain fills the stage), so any
+  // resolution scales to fit at 100%. Zoom multiplies from that fitted size.
   const img = (item: LightItem | null, opacity = 1) =>
     item?.originalAssetId != null ? (
       <img src={`/api/images/${item.originalAssetId}`} alt={item.label} draggable={false}
-        className="max-h-full max-w-full select-none" style={{ transform, filter, opacity, transition: drag.current ? "none" : "transform 0.12s" }} />
+        className="h-full w-full select-none object-contain" style={{ transform, filter, opacity, transition: drag.current ? "none" : "transform 0.12s" }} />
     ) : <div className="text-white/60">No image</div>;
 
   return (
@@ -145,7 +147,7 @@ export function QuickLookProvider({ children }: { children: React.ReactNode }) {
                   <div className="flex h-full flex-1 items-center justify-center overflow-hidden">{img(current)}</div>
                 </div>
               ) : (
-                <div ref={imgWrap} className="relative flex items-center justify-center" onClick={onMeasureClick} style={{ cursor: measure ? "crosshair" : t.zoom > 1 ? "grab" : "default" }}>
+                <div ref={imgWrap} className="relative flex h-full w-full items-center justify-center" onClick={onMeasureClick} style={{ cursor: measure ? "crosshair" : t.zoom > 1 ? "grab" : "default" }}>
                   {compare === "overlay" && other && <div className="absolute inset-0 flex items-center justify-center">{img(other)}</div>}
                   {compare === "overlay" ? img(current, overlayOpacity / 100) : img(current)}
                   {/* Measurement overlay */}
