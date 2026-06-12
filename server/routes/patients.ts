@@ -13,6 +13,7 @@ import {
   users,
   appointments,
   appointmentTypes,
+  treatmentPlans,
 } from "../../shared/schema";
 
 // Patient directory and chart data. Every query is scoped to the clinics the
@@ -149,7 +150,23 @@ export function registerPatientRoutes(app: Express) {
     const rows = await db.select().from(appointments).where(eq(appointments.patientId, id)).orderBy(desc(appointments.startsAt)).limit(20);
     const types = await db.select().from(appointmentTypes);
     const tById = new Map(types.map((t) => [t.id, t]));
+
+    // The adjusted estimate from the latest treatment plan: the chosen option's
+    // gross fee minus its insurance estimate, the patient portion, not the gross.
+    const plans = await db.select().from(treatmentPlans).where(eq(treatmentPlans.patientId, id)).orderBy(desc(treatmentPlans.createdAt)).limit(1);
+    let estimate: { grossCents: number; insuranceCents: number; netCents: number } | null = null;
+    if (plans[0]) {
+      const opts = (plans[0].options as Array<{ chosen?: boolean; items?: { feeCents: number }[]; insuranceEstimateCents?: number }>) ?? [];
+      const chosen = opts.find((o) => o.chosen) ?? opts[0];
+      if (chosen) {
+        const grossCents = (chosen.items ?? []).reduce((m, it) => m + (it.feeCents ?? 0), 0);
+        const insuranceCents = chosen.insuranceEstimateCents ?? 0;
+        estimate = { grossCents, insuranceCents, netCents: Math.max(0, grossCents - insuranceCents) };
+      }
+    }
+
     res.json({
+      estimate,
       appointments: rows.map((a) => ({
         id: a.id, startsAt: a.startsAt, endsAt: a.endsAt, status: a.status, operatory: a.operatory,
         confirmed: a.confirmed, typeName: a.appointmentTypeId ? tById.get(a.appointmentTypeId)?.name : null,

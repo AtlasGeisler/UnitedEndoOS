@@ -225,9 +225,10 @@ function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail:
   const balance = detail.patient.balanceCents ?? 0;
   const appts = useQuery({
     queryKey: ["/api/patients", patientId, "appointments"],
-    queryFn: () => apiRequest<{ appointments: ApptRow[] }>("GET", `/api/patients/${patientId}/appointments`),
+    queryFn: () => apiRequest<{ appointments: ApptRow[]; estimate: { grossCents: number; insuranceCents: number; netCents: number } | null }>("GET", `/api/patients/${patientId}/appointments`),
   });
   const all = appts.data?.appointments ?? [];
+  const estimate = appts.data?.estimate ?? null;
   const upcoming = all.filter((a) => new Date(a.startsAt) >= new Date()).sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
   const recentImages = [...studies].sort((a, b) => +new Date(b.capturedAt) - +new Date(a.capturedAt)).slice(0, 6);
 
@@ -251,6 +252,13 @@ function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail:
                 <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[11px]", a.confirmed ? "bg-complete/20 text-endo" : "bg-caution/20 text-caution")}>{a.confirmed ? "confirmed" : "unconfirmed"}</span>
               </div>
             )) : <div className="text-[13px] text-content-soft">No upcoming appointments.</div>}
+            {estimate && (
+              <div className="mt-2 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-[12px]">
+                <div className="flex justify-between"><span className="text-content-soft">Plan estimate</span><span className="tnum">${(estimate.grossCents / 100).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-content-soft">Less insurance</span><span className="tnum">-${(estimate.insuranceCents / 100).toFixed(2)}</span></div>
+                <div className="mt-0.5 flex justify-between border-t border-hairline pt-1 font-medium text-endo"><span>Adjusted patient portion</span><span className="tnum">${(estimate.netCents / 100).toFixed(2)}</span></div>
+              </div>
+            )}
           </Card>
 
           {/* Recent images, links into the imaging grid */}
