@@ -6,6 +6,7 @@ import { ChevronLeft, Upload, Stethoscope, CalendarPlus, CalendarDays, ImagePlus
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { age, type PatientRow, type StudyRow, type VisitRow } from "@/lib/clinical-types";
+import { useSelection, studyToSelection } from "@/lib/selection";
 import { ImagingGrid } from "@/components/imaging/ImagingGrid";
 import { Filmstrip } from "@/components/imaging/Filmstrip";
 import { ToothChart } from "@/components/imaging/ToothChart";
@@ -58,6 +59,31 @@ export function PatientChart() {
 
   const studies = studiesQ.data?.studies ?? [];
   const visits = visitsQ.data?.visits ?? [];
+
+  // Surface the active patient in the Inspector while the chart is open.
+  const { setSelection } = useSelection();
+  useEffect(() => {
+    const d = detail.data;
+    if (!d) return;
+    const pt = d.patient;
+    const fields = [
+      { label: "DOB", value: `${format(new Date(pt.dateOfBirth), "MMM d, yyyy")} (age ${age(pt.dateOfBirth)})` },
+      { label: "Phone", value: pt.phone ?? "—" },
+      { label: "Insurance", value: pt.insuranceCarrier ?? "—" },
+      { label: "Balance", value: `$${((pt.balanceCents ?? 0) / 100).toFixed(2)}` },
+      { label: "Images", value: String(d.imageCount) },
+    ];
+    if (d.referrer) fields.push({ label: "Referred by", value: `${d.referrer.fullName}, ${d.referrer.practiceName}` });
+    setSelection({
+      kind: "patient",
+      title: `${pt.firstName} ${pt.lastName}`,
+      subtitle: `${pt.sex ?? ""}${pt.city ? ` · ${pt.city}, ${pt.state ?? ""}` : ""}`.trim(),
+      thumbAssetId: pt.latestThumbAssetId ?? null,
+      fields,
+      href: `/patients/${pt.id}`,
+      hrefLabel: "Open chart",
+    });
+  }, [detail.data, setSelection]);
 
   // The selected tooth is read inside window listeners, keep it in a ref so the
   // import always tags with the latest value without re-attaching listeners.
@@ -183,7 +209,7 @@ export function PatientChart() {
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-hidden">
         {tab === "Imaging" && (
-          <ImagingGrid key={selectedTooth ?? "all"} studies={studies} visits={visits} initialTooth={selectedTooth} />
+          <ImagingGrid key={selectedTooth ?? "all"} studies={studies} visits={visits} initialTooth={selectedTooth} onPick={(s) => setSelection(studyToSelection(s))} />
         )}
         {tab === "Tooth Chart" && (
           <div className="h-full overflow-y-auto">
@@ -221,6 +247,7 @@ export function PatientChart() {
 }
 
 function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail: ChartDetail; studies: StudyRow[]; visits: VisitRow[]; patientId: number; onOpenVisit: (id: number) => void }) {
+  const { setSelection } = useSelection();
   const signed = visits.filter((v) => v.status === "signed").length;
   const balance = detail.patient.balanceCents ?? 0;
   const appts = useQuery({
@@ -246,11 +273,26 @@ function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail:
           {/* Upcoming appointments */}
           <Card icon={CalendarDays} title="Upcoming appointments">
             {upcoming.length ? upcoming.slice(0, 5).map((a) => (
-              <div key={a.id} className="flex items-center gap-2 border-b border-hairline py-2 text-[13px] last:border-0">
+              <button
+                key={a.id}
+                onClick={() => setSelection({
+                  kind: "appointment",
+                  title: `${detail.patient.firstName} ${detail.patient.lastName}`,
+                  subtitle: format(new Date(a.startsAt), "EEEE, MMMM d"),
+                  fields: [
+                    { label: "When", value: format(new Date(a.startsAt), "EEE MMM d, h:mm a") },
+                    { label: "Type", value: a.typeName ?? "—" },
+                    { label: "Operatory", value: a.operatory ?? "—" },
+                    { label: "Status", value: a.confirmed ? "Confirmed" : "Unconfirmed" },
+                  ],
+                })}
+                title="Show in Inspector"
+                className="flex w-full items-center gap-2 border-b border-hairline py-2 text-left text-[13px] last:border-0 hover:text-endo"
+              >
                 <span className="tnum">{format(new Date(a.startsAt), "EEE MMM d, h:mm a")}</span>
                 <span className="text-content-soft">{a.typeName}</span>
                 <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[11px]", a.confirmed ? "bg-complete/20 text-endo" : "bg-caution/20 text-caution")}>{a.confirmed ? "confirmed" : "unconfirmed"}</span>
-              </div>
+              </button>
             )) : <div className="text-[13px] text-content-soft">No upcoming appointments.</div>}
             {estimate && (
               <div className="mt-2 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-[12px]">
@@ -266,9 +308,14 @@ function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail:
             {recentImages.length ? (
               <div className="grid grid-cols-6 gap-1.5">
                 {recentImages.map((s) => (
-                  <div key={s.id} className="aspect-[3/4] overflow-hidden rounded border border-hairline bg-clay-900">
+                  <button
+                    key={s.id}
+                    onClick={() => setSelection(studyToSelection(s))}
+                    title="Show in Inspector"
+                    className="aspect-[3/4] overflow-hidden rounded border border-hairline bg-clay-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage"
+                  >
                     {s.thumbAssetId && <img src={`/api/images/${s.thumbAssetId}`} alt={s.type} className="h-full w-full object-cover" loading="lazy" />}
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : <div className="text-[13px] text-content-soft">No images yet.</div>}

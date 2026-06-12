@@ -5,6 +5,7 @@ import { queryClient } from "@/lib/api";
 import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider } from "@/lib/auth";
 import { QuickLookProvider } from "@/components/QuickLook";
+import { SelectionProvider } from "@/lib/selection";
 import { App } from "@/App";
 import "./index.css";
 
@@ -14,7 +15,9 @@ createRoot(document.getElementById("root")!).render(
       <ThemeProvider>
         <AuthProvider>
           <QuickLookProvider>
-            <App />
+            <SelectionProvider>
+              <App />
+            </SelectionProvider>
           </QuickLookProvider>
         </AuthProvider>
       </ThemeProvider>

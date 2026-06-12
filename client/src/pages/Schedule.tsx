@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, ShieldAlert, Clock, Unlock, X, ImageUp, Spar
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
+import { useSelection } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 import type { PatientRow } from "@/lib/clinical-types";
 
@@ -50,8 +51,29 @@ const ROWS = ((END_HOUR - START_HOUR) * 60) / ROW_MIN;
 // release. The clock is injectable so the release can be demonstrated.
 export function Schedule() {
   const { user } = useAuth();
+  const { setSelection } = useSelection();
   const [, navigate] = useLocation();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  // Populate the Inspector with the appointment, then open the chart. The
+  // selection persists across the navigation so its details stay visible.
+  const selectAppt = (a: Appt) => {
+    const fields = [
+      { label: "When", value: format(new Date(a.startsAt), "EEE MMM d, h:mm a") },
+      { label: "Operatory", value: a.operatory ?? "—" },
+      { label: "Type", value: a.typeName ?? "—" },
+      { label: "Status", value: a.confirmed ? "Confirmed" : "Unconfirmed" },
+    ];
+    if (a.isEmergencyType) fields.push({ label: "Emergency", value: "Yes" });
+    setSelection({
+      kind: "appointment",
+      title: a.patientName ?? "Open slot",
+      subtitle: format(new Date(a.startsAt), "EEEE, MMMM d"),
+      fields,
+      href: a.patientId ? `/patients/${a.patientId}` : undefined,
+      hrefLabel: "Open chart",
+    });
+  };
   const clinicId = user?.clinicIds[0];
   const [booking, setBooking] = useState<Appt | null>(null);
   const [importing, setImporting] = useState(false);
@@ -166,7 +188,10 @@ export function Schedule() {
                       onDragStart={(e) => e.dataTransfer.setData("text/appt", String(a.id))}
                       onClick={() => {
                         if (protectedOpen) setBooking(a);
-                        else if (a.patientId) navigate(`/patients/${a.patientId}`);
+                        else {
+                          selectAppt(a);
+                          if (a.patientId) navigate(`/patients/${a.patientId}`);
+                        }
                       }}
                       title={a.patientId ? "Open patient chart" : undefined}
                       className={cn(
