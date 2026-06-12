@@ -1,16 +1,19 @@
 import { useState, useCallback } from "react";
-import { useRoute, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useRoute, Link, useLocation } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ChevronLeft, Upload } from "lucide-react";
+import { ChevronLeft, Upload, Stethoscope, CalendarPlus, CalendarDays, ImagePlus, ArrowRight } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/api";
-import { age, type PatientRow, type StudyRow, type VisitRow, SEQUENCE_LABELS } from "@/lib/clinical-types";
+import { Button } from "@/components/ui/button";
+import { age, type PatientRow, type StudyRow, type VisitRow } from "@/lib/clinical-types";
 import { ImagingGrid } from "@/components/imaging/ImagingGrid";
 import { Filmstrip } from "@/components/imaging/Filmstrip";
 import { ToothChart } from "@/components/imaging/ToothChart";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { ClipboardSignature, CreditCard, FileText, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface ApptRow { id: number; startsAt: string; status: string; operatory: string | null; confirmed: boolean; typeName: string | null }
 
 interface ChartDetail {
   patient: PatientRow;
@@ -27,11 +30,18 @@ type Tab = (typeof TABS)[number];
 // dropping a file anywhere imports it into the active patient.
 export function PatientChart() {
   const [, params] = useRoute("/patients/:id");
+  const [, navigate] = useLocation();
   const id = Number(params?.id);
   const [tab, setTab] = useState<Tab>("Imaging");
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  // Start a visit and jump straight into the cockpit.
+  const startVisit = useMutation({
+    mutationFn: () => apiRequest<{ visit: { id: number } }>("POST", "/api/visits", { patientId: id, type: "treatment" }),
+    onSuccess: ({ visit }) => navigate(`/visits/${visit.id}`),
+  });
 
   const detail = useQuery({
     queryKey: ["/api/patients", id],
@@ -112,6 +122,19 @@ export function PatientChart() {
           </span>
         </div>
 
+        {/* Quick actions, the chart is the hub */}
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => startVisit.mutate()} disabled={startVisit.isPending}>
+            <Stethoscope className="h-4 w-4" /> {startVisit.isPending ? "Starting..." : "Start visit"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigate("/schedule")}>
+            <CalendarPlus className="h-4 w-4" /> Schedule appointment
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setTab("Imaging"); }}>
+            <ImagePlus className="h-4 w-4" /> Drop an image to import
+          </Button>
+        </div>
+
         {/* Tabs */}
         <div className="mt-3 flex gap-1 overflow-x-auto">
           {TABS.map((t) => (
@@ -144,8 +167,8 @@ export function PatientChart() {
             />
           </div>
         )}
-        {tab === "Overview" && <Overview detail={detail.data} studies={studies} visits={visits} />}
-        {tab === "Visits" && <Visits visits={visits} />}
+        {tab === "Overview" && <Overview detail={detail.data} studies={studies} visits={visits} patientId={id} onOpenVisit={(vid) => navigate(`/visits/${vid}`)} />}
+        {tab === "Visits" && <Visits visits={visits} onOpenVisit={(vid) => navigate(`/visits/${vid}`)} />}
         {tab === "Plans" && <PlaceholderPage icon={ClipboardSignature} title="Treatment Plans" blurb="Multi option plans with insurance estimates and canvas e-signature capture." phase="Phase 4" />}
         {tab === "Billing" && <PlaceholderPage icon={CreditCard} title="Billing" blurb="Claims, eligibility, statements, and payment plans for this patient." phase="Phase 5" />}
         {tab === "Documents" && <PlaceholderPage icon={FileText} title="Documents" blurb="Scanned forms, consents, and signed plan snapshots." phase="Phase 4" />}
@@ -169,39 +192,87 @@ export function PatientChart() {
   );
 }
 
-function Overview({ detail, studies, visits }: { detail: ChartDetail; studies: StudyRow[]; visits: VisitRow[] }) {
+function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail: ChartDetail; studies: StudyRow[]; visits: VisitRow[]; patientId: number; onOpenVisit: (id: number) => void }) {
   const signed = visits.filter((v) => v.status === "signed").length;
+  const balance = detail.patient.balanceCents ?? 0;
+  const appts = useQuery({
+    queryKey: ["/api/patients", patientId, "appointments"],
+    queryFn: () => apiRequest<{ appointments: ApptRow[] }>("GET", `/api/patients/${patientId}/appointments`),
+  });
+  const all = appts.data?.appointments ?? [];
+  const upcoming = all.filter((a) => new Date(a.startsAt) >= new Date()).sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
+  const recentImages = [...studies].sort((a, b) => +new Date(b.capturedAt) - +new Date(a.capturedAt)).slice(0, 6);
+
   return (
     <div className="h-full overflow-y-auto p-6">
-      <div className="grid max-w-3xl gap-4 sm:grid-cols-3">
-        <Stat label="Images" value={String(detail.imageCount)} />
-        <Stat label="Visits" value={String(visits.length)} />
-        <Stat label="Completed treatments" value={String(signed)} />
-      </div>
-      <div className="mt-5 max-w-3xl rounded-card border border-hairline bg-surface p-5 shadow-card">
-        <h3 className="mb-3 text-[14px] font-semibold">Recent visits</h3>
-        {visits.slice(0, 4).map((v) => (
-          <div key={v.id} className="flex items-center gap-3 border-b border-hairline py-2 text-[13px] last:border-0">
-            <span className="tnum text-content-soft">{format(new Date(v.visitDate), "MMM d, yyyy")}</span>
-            <span>Tooth {v.toothNumber}</span>
-            <span className="text-content-soft">{v.note?.pulpalDiagnosis}</span>
-            <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[11px]", v.status === "signed" ? "bg-complete/20 text-endo" : "bg-caution/20 text-caution")}>
-              {v.status}
-            </span>
-          </div>
-        ))}
-        {visits.length === 0 && <div className="text-[13px] text-content-soft">No visits recorded.</div>}
+      <div className="mx-auto max-w-4xl">
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Stat label="Images" value={String(detail.imageCount)} />
+          <Stat label="Visits" value={String(visits.length)} />
+          <Stat label="Completed" value={String(signed)} />
+          <Stat label="Balance" value={`$${(balance / 100).toFixed(2)}`} tone={balance > 0 ? "caution" : "ok"} />
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          {/* Upcoming appointments */}
+          <Card icon={CalendarDays} title="Upcoming appointments">
+            {upcoming.length ? upcoming.slice(0, 5).map((a) => (
+              <div key={a.id} className="flex items-center gap-2 border-b border-hairline py-2 text-[13px] last:border-0">
+                <span className="tnum">{format(new Date(a.startsAt), "EEE MMM d, h:mm a")}</span>
+                <span className="text-content-soft">{a.typeName}</span>
+                <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[11px]", a.confirmed ? "bg-complete/20 text-endo" : "bg-caution/20 text-caution")}>{a.confirmed ? "confirmed" : "unconfirmed"}</span>
+              </div>
+            )) : <div className="text-[13px] text-content-soft">No upcoming appointments.</div>}
+          </Card>
+
+          {/* Recent images, links into the imaging grid */}
+          <Card icon={ImagePlus} title="Recent imaging">
+            {recentImages.length ? (
+              <div className="grid grid-cols-6 gap-1.5">
+                {recentImages.map((s) => (
+                  <div key={s.id} className="aspect-[3/4] overflow-hidden rounded border border-hairline bg-clay-900">
+                    {s.thumbAssetId && <img src={`/api/images/${s.thumbAssetId}`} alt={s.type} className="h-full w-full object-cover" loading="lazy" />}
+                  </div>
+                ))}
+              </div>
+            ) : <div className="text-[13px] text-content-soft">No images yet.</div>}
+          </Card>
+        </div>
+
+        {/* Recent visits, each opens the cockpit */}
+        <div className="mt-4 rounded-card border border-hairline bg-surface p-5 shadow-card">
+          <h3 className="mb-3 text-[14px] font-semibold">Recent visits</h3>
+          {visits.slice(0, 6).map((v) => (
+            <button key={v.id} onClick={() => onOpenVisit(v.id)} className="group flex w-full items-center gap-3 border-b border-hairline py-2 text-left text-[13px] last:border-0 hover:text-endo">
+              <span className="tnum text-content-soft">{format(new Date(v.visitDate), "MMM d, yyyy")}</span>
+              <span className="font-medium">Tooth {v.toothNumber}</span>
+              <span className="text-content-soft">{v.note?.pulpalDiagnosis}</span>
+              <span className={cn("rounded-full px-2 py-0.5 text-[11px]", v.status === "signed" ? "bg-complete/20 text-endo" : "bg-caution/20 text-caution")}>{v.status}</span>
+              <ArrowRight className="ml-auto h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
+            </button>
+          ))}
+          {visits.length === 0 && <div className="text-[13px] text-content-soft">No visits recorded.</div>}
+        </div>
       </div>
     </div>
   );
 }
 
-function Visits({ visits }: { visits: VisitRow[] }) {
+function Card({ icon: Icon, title, children }: { icon: typeof CalendarDays; title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-card border border-hairline bg-surface p-4 shadow-card">
+      <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold"><Icon className="h-4 w-4 text-endo" /> {title}</div>
+      {children}
+    </div>
+  );
+}
+
+function Visits({ visits, onOpenVisit }: { visits: VisitRow[]; onOpenVisit: (id: number) => void }) {
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-3xl space-y-3">
         {visits.map((v) => (
-          <div key={v.id} className="rounded-card border border-hairline bg-surface p-4 shadow-card">
+          <div key={v.id} onClick={() => onOpenVisit(v.id)} className="cursor-pointer rounded-card border border-hairline bg-surface p-4 shadow-card transition-shadow hover:ring-2 hover:ring-sage">
             <div className="flex items-baseline gap-3">
               <span className="text-[14px] font-semibold">Tooth {v.toothNumber}</span>
               <span className="text-[12px] text-content-soft tnum">{format(new Date(v.visitDate), "EEEE, MMM d, yyyy")}</span>
@@ -227,11 +298,11 @@ function Visits({ visits }: { visits: VisitRow[] }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "ok" | "caution" }) {
   return (
     <div className="rounded-card border border-hairline bg-surface p-4 shadow-card">
       <div className="text-[11px] uppercase tracking-wide text-content-soft">{label}</div>
-      <div className="mt-1 text-[24px] font-semibold tnum">{value}</div>
+      <div className={cn("mt-1 text-[24px] font-semibold tnum", tone === "caution" && "text-caution")}>{value}</div>
     </div>
   );
 }

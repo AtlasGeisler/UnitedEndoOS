@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, addDays } from "date-fns";
-import { ChevronLeft, ChevronRight, ShieldAlert, Clock, Unlock, X, ImageUp, Sparkles, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShieldAlert, Clock, Unlock, X, ImageUp, Sparkles, Check, Plus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
@@ -49,10 +50,12 @@ const ROWS = ((END_HOUR - START_HOUR) * 60) / ROW_MIN;
 // release. The clock is injectable so the release can be demonstrated.
 export function Schedule() {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const clinicId = user?.clinicIds[0];
   const [booking, setBooking] = useState<Appt | null>(null);
   const [importing, setImporting] = useState(false);
+  const [newSlot, setNewSlot] = useState<{ op: string; time: string } | null>(null);
 
   const { data } = useQuery({
     queryKey: ["/api/schedule", date, clinicId],
@@ -138,9 +141,22 @@ export function Schedule() {
             <div key={op} className="min-w-[150px] flex-1 border-l border-hairline">
               <div className="flex h-7 items-center justify-center text-[11px] font-semibold uppercase tracking-wide text-content-soft">{op}</div>
               <div className="relative">
-                {Array.from({ length: ROWS }).map((_, i) => (
-                  <div key={i} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDrop(op, i, e)} className={cn("border-b border-hairline", i % 2 === 1 && "border-b-transparent")} style={{ height: ROW_PX }} />
-                ))}
+                {Array.from({ length: ROWS }).map((_, i) => {
+                  const h = START_HOUR + Math.floor(i / 2);
+                  const m = i % 2 === 0 ? "00" : "30";
+                  return (
+                    <div
+                      key={i}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => onDrop(op, i, e)}
+                      onClick={() => setNewSlot({ op, time: `${String(h).padStart(2, "0")}:${m}` })}
+                      className={cn("group/cell relative cursor-pointer border-b border-hairline hover:bg-endo/5", i % 2 === 1 && "border-b-transparent")}
+                      style={{ height: ROW_PX }}
+                    >
+                      <Plus className="absolute right-1 top-1 h-3 w-3 text-endo opacity-0 transition-opacity group-hover/cell:opacity-60" />
+                    </div>
+                  );
+                })}
                 {appts.filter((a) => (a.operatory ?? "Op 1") === op).map((a) => {
                   const protectedOpen = a.isProtected && !a.patientId;
                   return (
@@ -148,14 +164,18 @@ export function Schedule() {
                       key={a.id}
                       draggable={!!a.patientId}
                       onDragStart={(e) => e.dataTransfer.setData("text/appt", String(a.id))}
-                      onClick={() => protectedOpen && setBooking(a)}
+                      onClick={() => {
+                        if (protectedOpen) setBooking(a);
+                        else if (a.patientId) navigate(`/patients/${a.patientId}`);
+                      }}
+                      title={a.patientId ? "Open patient chart" : undefined}
                       className={cn(
                         "absolute inset-x-1 overflow-hidden rounded-md border px-2 py-1 text-[11px] shadow-sm",
                         protectedOpen
                           ? "cursor-pointer border-dashed border-urgent/50 bg-urgent/8 text-urgent"
                           : a.isEmergencyType
-                            ? "border-urgent/40 bg-urgent/12 text-content"
-                            : "cursor-grab border-hairline bg-surface text-content",
+                            ? "cursor-pointer border-urgent/40 bg-urgent/12 text-content hover:ring-2 hover:ring-sage"
+                            : "cursor-pointer border-hairline bg-surface text-content hover:ring-2 hover:ring-sage",
                       )}
                       style={{ top: topFor(a.startsAt) + 2, height: heightFor(a), borderLeftWidth: 3, borderLeftColor: a.typeColor ?? "#3A7D44" }}
                     >
@@ -179,6 +199,7 @@ export function Schedule() {
 
       {booking && <BookDialog slot={booking} onClose={() => setBooking(null)} />}
       {importing && clinicId != null && <ImportDialog clinicId={clinicId} date={date} onClose={() => setImporting(false)} />}
+      {newSlot && clinicId != null && <NewAppointmentDialog clinicId={clinicId} date={date} slot={newSlot} onClose={() => setNewSlot(null)} onOpenChart={(pid) => navigate(`/patients/${pid}`)} />}
     </div>
   );
 }
@@ -324,6 +345,74 @@ function ImportDialog({ clinicId, date, onClose }: { clinicId: number; date: str
                 <Check className="h-4 w-4" /> {confirm.isPending ? "Creating..." : `Create ${Object.values(include).filter(Boolean).length} appointments`}
               </Button>
             </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Quick add. Click an empty slot, pick a patient and type, and the appointment is
+// created at that time and operatory. The patient chart is one click away.
+function NewAppointmentDialog({ clinicId, date, slot, onClose, onOpenChart }: { clinicId: number; date: string; slot: { op: string; time: string }; onClose: () => void; onOpenChart: (pid: number) => void }) {
+  const [q, setQ] = useState("");
+  const [patient, setPatient] = useState<PatientRow | null>(null);
+  const [typeId, setTypeId] = useState<number | "">("");
+
+  const search = useQuery({ queryKey: ["/api/patients", q], queryFn: () => apiRequest<{ patients: PatientRow[] }>("GET", `/api/patients?q=${encodeURIComponent(q)}`), enabled: q.length > 1 });
+  const types = useQuery({ queryKey: ["/api/appointment-types"], queryFn: () => apiRequest<{ types: { id: number; name: string; durationMinutes: number; color: string }[] }>("GET", "/api/appointment-types") });
+  const typeList = types.data?.types ?? [];
+
+  const create = useMutation({
+    mutationFn: () => {
+      const t = typeList.find((x) => x.id === typeId);
+      const start = new Date(`${date}T${slot.time}:00`);
+      const dur = t?.durationMinutes ?? 60;
+      return apiRequest<{ appointment: { id: number } }>("POST", "/api/appointments", {
+        clinicId, patientId: patient!.id, appointmentTypeId: typeId || null,
+        operatory: slot.op, startsAt: start.toISOString(), endsAt: new Date(start.getTime() + dur * 60000).toISOString(),
+      });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/schedule"] }); onClose(); },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border border-hairline bg-surface p-5 shadow-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1 flex items-center gap-2">
+          <Plus className="h-4 w-4 text-endo" />
+          <h2 className="text-[15px] font-semibold">New appointment</h2>
+          <button onClick={onClose} className="ml-auto text-content-soft hover:text-content"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="mb-3 text-[12px] text-content-soft">{format(new Date(`${date}T${slot.time}:00`), "EEEE, MMM d, h:mm a")}, {slot.op}</p>
+
+        {!patient ? (
+          <>
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search patient by name..." className="mb-2 w-full rounded-lg border border-hairline bg-[var(--surface-2)] px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-sage" />
+            {(search.data?.patients ?? []).length > 0 && (
+              <div className="mb-1 max-h-40 overflow-y-auto rounded-lg border border-hairline">
+                {(search.data?.patients ?? []).slice(0, 7).map((p) => (
+                  <button key={p.id} onClick={() => setPatient(p)} className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-[var(--surface-2)]">{p.lastName}, {p.firstName}</button>
+                ))}
+              </div>
+            )}
+            {q.length <= 1 && <div className="rounded-lg border border-dashed border-hairline px-3 py-4 text-center text-[12px] text-content-soft">Type a name to find the patient.</div>}
+          </>
+        ) : (
+          <>
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-hairline bg-[var(--surface-2)] px-3 py-2 text-[13px]">
+              <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+              <button onClick={() => onOpenChart(patient.id)} className="text-[11px] text-endo hover:underline">Open chart</button>
+              <button onClick={() => setPatient(null)} className="ml-auto text-[11px] text-content-soft hover:text-content">Change</button>
+            </div>
+            <label className="mb-1 block text-[12px] text-content-soft">Appointment type</label>
+            <select value={typeId} onChange={(e) => setTypeId(e.target.value ? Number(e.target.value) : "")} className="mb-3 w-full rounded-lg border border-hairline bg-[var(--surface-2)] px-2 py-2 text-[13px] outline-none">
+              <option value="">Select type...</option>
+              {typeList.map((t) => <option key={t.id} value={t.id}>{t.name}, {t.durationMinutes} min</option>)}
+            </select>
+            <Button className="w-full" disabled={!typeId || create.isPending} onClick={() => create.mutate()}>
+              <Check className="h-4 w-4" /> {create.isPending ? "Adding..." : "Add appointment"}
+            </Button>
           </>
         )}
       </div>

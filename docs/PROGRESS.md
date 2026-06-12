@@ -340,3 +340,19 @@ Report delivery service:
 Verified: tsc clean, build green, all seven smoke tests pass. The predictor
 returned Pulp necrosis and Chronic apical abscess with an unfavorable prognosis,
 a weight edit saved, and a simulated fax delivery landed in the outbox.
+
+## Interconnection: the chart as the hub (2026-06-12)
+
+Feedback driven changes to center the app on the patient chart and imaging and to
+make the schedule a real entry point.
+
+- Click a booked appointment on the Schedule to open that patient's chart. Click
+  an empty slot to add an appointment: search the patient, pick the type, and it
+  is created at that time and operatory.
+- The Patient Chart gained quick actions, Start visit (straight into the cockpit),
+  Schedule appointment, and image import, and the Overview is now a dashboard:
+  images, visits, completed, and balance stats, upcoming appointments, a recent
+  imaging strip, and recent visits that open the cockpit on click.
+- A new patient appointments endpoint feeds the dashboard.
+
+tsc clean, build green, all seven smoke tests pass.

@@ -11,6 +11,8 @@ import {
   soapNotes,
   referringDentists,
   users,
+  appointments,
+  appointmentTypes,
 } from "../../shared/schema";
 
 // Patient directory and chart data. Every query is scoped to the clinics the
@@ -133,6 +135,24 @@ export function registerPatientRoutes(app: Express) {
         ...st,
         originalAssetId: byStudy.get(st.id)?.original ?? null,
         thumbAssetId: byStudy.get(st.id)?.thumb ?? null,
+      })),
+    });
+  });
+
+  // This patient's appointments for the chart dashboard, soonest first.
+  app.get("/api/patients/:id/appointments", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const patient = await db.query.patients.findFirst({ where: eq(patients.id, id) });
+    if (!patient || !req.user!.clinicIds.includes(patient.clinicId)) {
+      return res.status(404).json({ error: "Patient not found" });
+    }
+    const rows = await db.select().from(appointments).where(eq(appointments.patientId, id)).orderBy(desc(appointments.startsAt)).limit(20);
+    const types = await db.select().from(appointmentTypes);
+    const tById = new Map(types.map((t) => [t.id, t]));
+    res.json({
+      appointments: rows.map((a) => ({
+        id: a.id, startsAt: a.startsAt, endsAt: a.endsAt, status: a.status, operatory: a.operatory,
+        confirmed: a.confirmed, typeName: a.appointmentTypeId ? tById.get(a.appointmentTypeId)?.name : null,
       })),
     });
   });
