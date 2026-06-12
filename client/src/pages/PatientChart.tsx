@@ -2,10 +2,10 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRoute, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ChevronLeft, Upload, Stethoscope, CalendarPlus, CalendarDays, ImagePlus, ArrowRight } from "lucide-react";
+import { ChevronLeft, Upload, Stethoscope, CalendarPlus, CalendarDays, ImagePlus, ArrowRight, AlertTriangle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { age, type PatientRow, type StudyRow, type VisitRow } from "@/lib/clinical-types";
+import { age, patientAlerts, type PatientRow, type StudyRow, type VisitRow } from "@/lib/clinical-types";
 import { useSelection, studyToSelection } from "@/lib/selection";
 import { ImagingGrid } from "@/components/imaging/ImagingGrid";
 import { Filmstrip } from "@/components/imaging/Filmstrip";
@@ -74,10 +74,12 @@ export function PatientChart() {
       { label: "Images", value: String(d.imageCount) },
     ];
     if (d.referrer) fields.push({ label: "Referred by", value: `${d.referrer.fullName}, ${d.referrer.practiceName}` });
+    const alerts = patientAlerts(pt);
     setSelection({
       kind: "patient",
       title: `${pt.firstName} ${pt.lastName}`,
       subtitle: `${pt.sex ?? ""}${pt.city ? ` · ${pt.city}, ${pt.state ?? ""}` : ""}`.trim(),
+      alert: alerts.length ? alerts.join(" · ") : undefined,
       thumbAssetId: pt.latestThumbAssetId ?? null,
       fields,
       href: `/patients/${pt.id}`,
@@ -205,6 +207,27 @@ export function PatientChart() {
           ))}
         </div>
       </div>
+
+      {/* Clinical alert banner, allergies and medical flags before any care. */}
+      {patientAlerts(p).length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-urgent/25 bg-urgent/8 px-6 py-2 text-[12px]">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-urgent">
+            <AlertTriangle className="h-3.5 w-3.5" /> Clinical alerts
+          </span>
+          {(p.allergies ?? []).length > 0 && (
+            <span className="text-content">
+              <span className="text-content-soft">Allergies: </span>
+              <span className="font-medium text-urgent">{(p.allergies ?? []).join(", ")}</span>
+            </span>
+          )}
+          {(p.medicalAlerts ?? []).length > 0 && (
+            <span className="text-content">
+              <span className="text-content-soft">Medical: </span>
+              <span className="font-medium">{(p.medicalAlerts ?? []).join(", ")}</span>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-hidden">

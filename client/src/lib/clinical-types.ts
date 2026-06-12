@@ -17,7 +17,15 @@ export interface PatientRow {
   status: string;
   primaryProviderId: number | null;
   referringDentistId: number | null;
+  allergies?: string[] | null;
+  medicalAlerts?: string[] | null;
   latestThumbAssetId?: number | null;
+}
+
+// Combined clinical alerts for a patient, allergies first. Used by the patient
+// list badge, the chart banner, and the Inspector.
+export function patientAlerts(p: { allergies?: string[] | null; medicalAlerts?: string[] | null }): string[] {
+  return [...(p.allergies ?? []), ...(p.medicalAlerts ?? [])];
 }
 
 export interface StudyRow {

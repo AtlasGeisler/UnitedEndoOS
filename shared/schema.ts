@@ -166,6 +166,11 @@ export const patients = pgTable("patients", {
   insuranceMemberId: text("insurance_member_id"),
   balanceCents: integer("balance_cents").notNull().default(0),
   status: text("status").notNull().default("active"),
+  // Clinical safety flags surfaced across the app, in the spirit of a Mac-native
+  // chart's at-a-glance alerts: drug/material allergies and medical alerts
+  // (premedication, anticoagulants, latex, pregnancy) shown before any care.
+  allergies: jsonb("allergies").$type<string[]>(),
+  medicalAlerts: jsonb("medical_alerts").$type<string[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

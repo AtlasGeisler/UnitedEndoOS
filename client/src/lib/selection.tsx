@@ -16,6 +16,7 @@ export interface Selection {
   kind: "patient" | "image" | "appointment" | "visit";
   title: string;
   subtitle?: string;
+  alert?: string;
   fields: InspectorField[];
   thumbAssetId?: number | null;
   href?: string;

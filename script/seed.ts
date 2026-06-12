@@ -23,12 +23,21 @@ const rnd = () => {
 };
 const pick = <T>(arr: T[]): T => arr[Math.floor(rnd() * arr.length)];
 const rint = (a: number, b: number) => a + Math.floor(rnd() * (b - a + 1));
+// Pick n distinct items from an array.
+const pickSome = <T>(arr: T[], n: number): T[] => {
+  const copy = [...arr];
+  const out: T[] = [];
+  for (let i = 0; i < n && copy.length; i++) out.push(copy.splice(Math.floor(rnd() * copy.length), 1)[0]);
+  return out;
+};
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000);
 
 const FIRST = ["Ada", "Alan", "Grace", "Linus", "Margaret", "Edsger", "Barbara", "Donald", "Katherine", "Tim", "Radia", "Vint", "Hedy", "Claude", "Dorothy", "Marvin", "Ken", "Joan", "Frances", "Guido", "Maya", "Omar", "Priya", "Tobias", "Sofia", "Marcus", "Lena", "Caleb", "Nadia", "Rohan", "Elise", "Bjorn", "Imani", "Theo", "Aria", "Felix", "Noor", "Cyrus", "Greta", "Mateo"];
 const LAST = ["Lovelace", "Turing", "Hopper", "Torvalds", "Hamilton", "Dijkstra", "Liskov", "Knuth", "Johnson", "Berners-Lee", "Perlman", "Cerf", "Lamarr", "Shannon", "Vaughan", "Minsky", "Thompson", "Clarke", "Allen", "Rossum", "Okafor", "Haddad", "Anand", "Berg", "Marino", "Cole", "Sorensen", "Reyes", "Khan", "Patel", "Nyberg", "Holm", "Abara", "Vance", "Costa", "Bauer", "Saab", "Darius", "Lindqvist", "Soto"];
 const CITIES = [["Edina", "55435"], ["Minneapolis", "55401"], ["Eden Prairie", "55344"], ["Bloomington", "55420"], ["St. Louis Park", "55416"], ["Minnetonka", "55305"]];
 const CARRIERS = ["Delta Dental", "Cigna", "MetLife", "Aetna", "United Concordia", "Guardian", "Self pay"];
+const ALLERGIES = ["Penicillin", "Latex", "Codeine", "Sulfa drugs", "Aspirin/NSAIDs", "Local anesthetic (amide)", "Erythromycin", "Iodine"];
+const MEDICAL_ALERTS = ["Premedication required (prosthetic joint)", "Premedication required (heart murmur)", "Anticoagulant therapy", "Pregnant", "Diabetic", "Bisphosphonate therapy", "Hypertension"];
 
 const PULPAL = ["Normal pulp", "Reversible pulpitis", "Symptomatic irreversible pulpitis", "Asymptomatic irreversible pulpitis", "Pulp necrosis", "Previously treated", "Previously initiated therapy"];
 const APICAL = ["Normal apical tissues", "Symptomatic apical periodontitis", "Asymptomatic apical periodontitis", "Acute apical abscess", "Chronic apical abscess", "Condensing osteitis"];
@@ -229,6 +238,9 @@ async function seed() {
       insuranceCarrier: pick(CARRIERS),
       insuranceMemberId: `M${rint(100000, 999999)}`,
       balanceCents: rnd() > 0.6 ? rint(0, 40000) : 0,
+      // Clinical safety flags on a realistic minority of patients.
+      allergies: rnd() > 0.7 ? pickSome(ALLERGIES, rint(1, 2)) : null,
+      medicalAlerts: rnd() > 0.78 ? pickSome(MEDICAL_ALERTS, 1) : null,
     }).returning();
 
     // A baseline panoramic or PA for almost every patient.

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Search, LayoutGrid, List, ImageOff } from "lucide-react";
+import { Search, LayoutGrid, List, ImageOff, AlertTriangle } from "lucide-react";
 import { apiRequest } from "@/lib/api";
-import { age, type PatientRow } from "@/lib/clinical-types";
+import { age, patientAlerts, type PatientRow } from "@/lib/clinical-types";
 import { cn } from "@/lib/utils";
 
 // The patient directory: instant search, a list and a card view, and a hover
@@ -63,8 +63,9 @@ export function Patients() {
                   <tr key={p.id} className="group border-b border-hairline last:border-0 hover:bg-[var(--surface-2)]">
                     <td className="px-4 py-2">
                       <Link href={`/patients/${p.id}`}>
-                        <span className="cursor-pointer font-medium text-content hover:text-endo">
+                        <span className="inline-flex cursor-pointer items-center gap-1.5 font-medium text-content hover:text-endo">
                           {p.lastName}, {p.firstName}
+                          <AlertChip alerts={patientAlerts(p)} />
                         </span>
                       </Link>
                     </td>
@@ -90,7 +91,10 @@ export function Patients() {
                     <Thumb assetId={p.latestThumbAssetId} />
                   </div>
                   <div className="p-3">
-                    <div className="truncate text-[13px] font-medium">{p.lastName}, {p.firstName}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[13px] font-medium">{p.lastName}, {p.firstName}</span>
+                      <AlertChip alerts={patientAlerts(p)} />
+                    </div>
                     <div className="text-[11px] text-content-soft">Age {age(p.dateOfBirth)}, {p.insuranceCarrier}</div>
                   </div>
                 </div>
@@ -100,6 +104,20 @@ export function Patients() {
         )}
       </div>
     </div>
+  );
+}
+
+// A compact clinical-alert flag. Hover reveals the full allergy and alert list.
+function AlertChip({ alerts }: { alerts: string[] }) {
+  if (!alerts.length) return null;
+  return (
+    <span
+      title={`Clinical alerts: ${alerts.join(", ")}`}
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-urgent/12 px-1.5 py-0.5 text-[10px] font-semibold text-urgent"
+    >
+      <AlertTriangle className="h-3 w-3" />
+      {alerts.length}
+    </span>
   );
 }
 

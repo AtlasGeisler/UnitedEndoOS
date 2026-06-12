@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation } from "wouter";
-import { Info, X, ArrowRight, Maximize2, User, Image as ImageIcon, CalendarDays } from "lucide-react";
+import { Info, X, ArrowRight, Maximize2, User, Image as ImageIcon, CalendarDays, AlertTriangle } from "lucide-react";
 import { useSelection } from "@/lib/selection";
 import { useQuickLook } from "@/components/QuickLook";
 
@@ -82,6 +82,14 @@ export function Inspector({ open }: { open: boolean }) {
                 {selection.subtitle && (
                   <div className="mt-0.5 text-[12px] text-content-soft">
                     {selection.subtitle}
+                  </div>
+                )}
+
+                {/* Clinical alert banner */}
+                {selection.alert && (
+                  <div className="mt-3 flex items-start gap-1.5 rounded-md bg-urgent/12 px-2.5 py-2 text-[12px] font-medium text-urgent">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>{selection.alert}</span>
                   </div>
                 )}
 
