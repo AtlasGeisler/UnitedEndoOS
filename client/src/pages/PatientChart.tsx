@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRoute, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -59,30 +59,63 @@ export function PatientChart() {
   const studies = studiesQ.data?.studies ?? [];
   const visits = visitsQ.data?.visits ?? [];
 
-  const onDrop = useCallback(
-    async (e: React.DragEvent) => {
+  // The selected tooth is read inside window listeners, keep it in a ref so the
+  // import always tags with the latest value without re-attaching listeners.
+  const toothRef = useRef<number | null>(selectedTooth);
+  toothRef.current = selectedTooth;
+
+  const importFile = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("image/")) return;
+      setImporting(true);
+      try {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.readAsDataURL(file);
+        });
+        await apiRequest("POST", "/api/studies/import", {
+          patientId: id,
+          dataUrl,
+          type: "intraoral_photo",
+          toothNumbers: toothRef.current ? [toothRef.current] : [],
+        });
+        await queryClient.invalidateQueries({ queryKey: ["/api/patients", id, "studies"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/patients", id] });
+      } finally {
+        setImporting(false);
+      }
+    },
+    [id],
+  );
+
+  // Guard the whole window so the browser never navigates to a dropped file, and
+  // import any image dropped anywhere on the chart, not just an exact target.
+  useEffect(() => {
+    const onOver = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes("Files")) {
+        e.preventDefault();
+        setDragOver(true);
+      }
+    };
+    const onLeave = (e: DragEvent) => {
+      if (e.relatedTarget === null) setDragOver(false);
+    };
+    const onDropWin = (e: DragEvent) => {
       e.preventDefault();
       setDragOver(false);
-      const file = e.dataTransfer.files?.[0];
-      if (!file || !file.type.startsWith("image/")) return;
-      setImporting(true);
-      const dataUrl = await new Promise<string>((resolve) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result as string);
-        r.readAsDataURL(file);
-      });
-      await apiRequest("POST", "/api/studies/import", {
-        patientId: id,
-        dataUrl,
-        type: "intraoral_photo",
-        toothNumbers: selectedTooth ? [selectedTooth] : [],
-      });
-      await queryClient.invalidateQueries({ queryKey: ["/api/patients", id, "studies"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/patients", id] });
-      setImporting(false);
-    },
-    [id, selectedTooth],
-  );
+      const file = e.dataTransfer?.files?.[0];
+      if (file) void importFile(file);
+    };
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("drop", onDropWin);
+    return () => {
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("drop", onDropWin);
+    };
+  }, [importFile]);
 
   if (detail.isLoading) {
     return <div className="flex h-full items-center justify-center text-[13px] text-content-soft">Loading chart...</div>;
@@ -93,12 +126,7 @@ export function PatientChart() {
   const p = detail.data.patient;
 
   return (
-    <div
-      className="relative flex h-full flex-col"
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={onDrop}
-    >
+    <div className="relative flex h-full flex-col">
       {/* Header */}
       <div className="border-b border-hairline px-6 py-3">
         <Link href="/patients">
