@@ -99,6 +99,21 @@ export function registerAuthRoutes(app: Express) {
     const user = await loadUser(req.session.userId);
     res.json({ user });
   });
+
+  // Live username verification, the EndoVision login affordance: as the operator
+  // types their email the form confirms the matching staff member by name and
+  // role. This intentionally reveals whether an address is a known account, the
+  // accepted trade-off for an internal, single-tenant clinic EDR; it returns no
+  // credential material and never touches the password. Debounced client side.
+  app.get("/api/auth/check-username", async (req, res) => {
+    const email = String(req.query.email ?? "").trim().toLowerCase();
+    if (!email || email.length < 3) return res.json({ exists: false });
+    const row = await db.query.users.findFirst({
+      where: eq(users.email, email),
+    });
+    if (!row || !row.isActive) return res.json({ exists: false });
+    res.json({ exists: true, fullName: row.fullName, role: row.role, title: row.title });
+  });
 }
 
 export function hashPassword(plain: string): string {
