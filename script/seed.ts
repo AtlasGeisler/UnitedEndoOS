@@ -69,13 +69,15 @@ async function clearAll() {
     s.imageAnnotations, s.imageComparisons, s.imageAssets, s.imageStudies,
     s.mountInstances, s.messages, s.conversations,
     // Children of invoices (payments, claims, items) must clear before invoices.
-    s.payments, s.claims, s.invoiceItems, s.invoices,
+    s.payments, s.paymentBatches, s.claims, s.invoiceItems, s.invoices,
     s.insuranceNarratives, s.referralReports, s.soapNotes,
     s.treatmentPlans, s.activityLogs, s.visits, s.appointments,
     s.reportDeliveryLog, s.referralStatusHistory, s.crmAlerts, s.touchpoints,
+    s.aiAuditLogs,
     s.referrals, s.patients, s.referringDentistClinics, s.referringDentists,
-    s.aiAuditLogs, s.aiPrompts, s.aiPredictionWeights, s.soapTemplates,
+    s.aiPrompts, s.aiPredictionWeights, s.soapTemplates,
     s.templates, s.configOptions, s.configCategories, s.appSettings,
+    s.insuranceProfileExceptions, s.insuranceProfiles,
     s.carrierPatterns, s.feeSchedule, s.appointmentTypes, s.mountTemplates,
     s.staffProfiles, s.auditLogs, s.userClinicAccess, s.users, s.clinics,
   ];
@@ -159,6 +161,31 @@ async function seed() {
     requiredDocumentation: ["Pre-operative periapical", "Pulpal and apical diagnosis", "Narrative of necessity"],
     tips: `${c} typically requests a periapical and a narrative for D3330. Submit the pre-op film with the claim.`,
   })));
+
+  // --- insurance profiles (carrier + employer plans with per-code exceptions) ---
+  const PROFILE_SEED = [
+    { carrier: "Delta Dental", employer: "Target Corporation", planType: "PPO", coverage: 80, deductible: 5000, annualMax: 150000, group: "TGT-4471",
+      exceptions: [{ cdtCode: "D3330", coveragePercent: 80 }, { cdtCode: "D3346", coveragePercent: 60 }, { cdtCode: "D2950", coveragePercent: 50 }] },
+    { carrier: "Cigna", employer: "Best Buy Co.", planType: "PPO", coverage: 50, deductible: 7500, annualMax: 100000, group: "BBY-2210",
+      exceptions: [{ cdtCode: "D3330", coveragePercent: 60 }, { cdtCode: "D3320", coveragePercent: 60 }] },
+    { carrier: "MetLife", employer: "3M Company", planType: "PPO", coverage: 80, deductible: 2500, annualMax: 200000, group: "MMM-8890",
+      exceptions: [{ cdtCode: "D3331", coveragePercent: 50 }] },
+    { carrier: "Aetna", employer: "U.S. Bancorp", planType: "DHMO", coverage: 70, deductible: 5000, annualMax: 125000, group: "USB-1503",
+      exceptions: [] },
+  ];
+  for (const p of PROFILE_SEED) {
+    const [prof] = await db.insert(s.insuranceProfiles).values({
+      clinicId: clinicIds[0], carrier: p.carrier, employer: p.employer, groupNumber: p.group,
+      planType: p.planType, defaultCoveragePercent: p.coverage, deductibleCents: p.deductible,
+      annualMaximumCents: p.annualMax,
+      advancedDeductibles: { byCategory: [{ category: "Endodontics", deductibleCents: 0 }, { category: "Restorative", deductibleCents: p.deductible }], byCode: [] },
+    }).returning();
+    if (p.exceptions.length) {
+      await db.insert(s.insuranceProfileExceptions).values(
+        p.exceptions.map((e) => ({ profileId: prof.id, cdtCode: e.cdtCode, coveragePercent: e.coveragePercent })),
+      );
+    }
+  }
 
   // --- referring dentists ---
   const GP_PRACTICES = ["Lakeside Family Dental", "Nokomis Dental Arts", "Cedar Smiles", "Linden Hills Dental", "Bryn Mawr Dental Group", "Calhoun Family Dentistry", "Edina Dental Care", "Wayzata Smile Studio"];

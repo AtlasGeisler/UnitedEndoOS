@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Users2, MapPin, ShieldAlert, Send, Activity } from "lucide-react";
+import { Users2, MapPin, ShieldAlert, Send, Activity, Shield } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABELS } from "@/lib/auth";
@@ -21,7 +22,10 @@ export function Operations() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="border-b border-hairline px-7 py-4"><h1 className="text-[18px] font-semibold">Operations</h1></div>
+      <div className="flex items-center gap-3 border-b border-hairline px-7 py-4">
+        <h1 className="text-[18px] font-semibold">Operations</h1>
+        <Link href="/insurance"><span className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-hairline px-2.5 py-1 text-[13px] text-content-soft hover:border-endo hover:text-endo"><Shield className="h-4 w-4" /> Insurance profiles</span></Link>
+      </div>
       <div className="px-6 pt-6"><ContactTrace /></div>
       <div className="grid gap-5 p-6 lg:grid-cols-2">
         <Panel icon={Users2} title="Staff and roles">

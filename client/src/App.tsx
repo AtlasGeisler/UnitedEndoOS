@@ -23,6 +23,7 @@ import { Operations } from "@/pages/Operations";
 import { Admin } from "@/pages/Admin";
 import { Shortcuts } from "@/pages/Shortcuts";
 import { Tutorial } from "@/pages/Tutorial";
+import { InsuranceProfiles } from "@/pages/InsuranceProfiles";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { MODULES } from "@/modules";
 
@@ -142,6 +143,7 @@ export function App() {
         <Route path="/admin" component={Admin} />
         <Route path="/shortcuts" component={Shortcuts} />
         <Route path="/tutorial" component={Tutorial} />
+        <Route path="/insurance" component={InsuranceProfiles} />
         {MODULES.filter((m) => !["patients", "clinical", "today", "schedule", "worklists", "referrals", "referring", "plans", "billing", "messages", "analytics", "performance", "operations", "admin"].includes(m.key)).map((m) => {
           const meta = MODULE_META[m.key];
           return (

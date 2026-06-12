@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { MODULES } from "@/modules";
 import { useTheme } from "@/lib/theme";
-import { Moon, ArrowRight, Keyboard, GraduationCap } from "lucide-react";
+import { Moon, ArrowRight, Keyboard, GraduationCap, Shield } from "lucide-react";
 
 // The Cmd+K command palette, the app's front door. In Phase 0 it jumps to any
 // module and toggles the theme. Later phases register patients, images, and
@@ -93,6 +93,13 @@ export function CommandPalette({
                 className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-content data-[selected=true]:bg-endo/12 data-[selected=true]:text-endo"
               >
                 <GraduationCap className="h-4 w-4" /> Take the tutorial
+              </Command.Item>
+              <Command.Item
+                value="Insurance profiles carriers"
+                onSelect={() => go("/insurance")}
+                className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-content data-[selected=true]:bg-endo/12 data-[selected=true]:text-endo"
+              >
+                <Shield className="h-4 w-4" /> Insurance profiles
               </Command.Item>
             </Command.Group>
           </Command.List>

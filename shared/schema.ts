@@ -514,6 +514,36 @@ export const claims = pgTable("claims", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Insurance profiles, adopted from EndoVision: a carrier and employer plan with
+// coverage percentages, deductibles (a default plus advanced by category and by
+// code), and an annual maximum. Per-code coverage exceptions live in their own
+// table for the scrollable Estimates-Percents list.
+export interface AdvancedDeductibles {
+  byCategory?: { category: string; deductibleCents: number }[];
+  byCode?: { cdtCode: string; deductibleCents: number }[];
+}
+export const insuranceProfiles = pgTable("insurance_profiles", {
+  id: serial("id").primaryKey(),
+  clinicId: integer("clinic_id").notNull().references(() => clinics.id),
+  carrier: text("carrier").notNull(),
+  employer: text("employer").notNull(),
+  groupNumber: text("group_number"),
+  planType: text("plan_type"),
+  defaultCoveragePercent: integer("default_coverage_percent").notNull().default(50),
+  deductibleCents: integer("deductible_cents").notNull().default(0),
+  annualMaximumCents: integer("annual_maximum_cents").notNull().default(150000),
+  advancedDeductibles: jsonb("advanced_deductibles").$type<AdvancedDeductibles>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Per-code coverage exceptions, the Estimates-Percents list.
+export const insuranceProfileExceptions = pgTable("insurance_profile_exceptions", {
+  id: serial("id").primaryKey(),
+  profileId: integer("profile_id").notNull().references(() => insuranceProfiles.id),
+  cdtCode: text("cdt_code").notNull(),
+  coveragePercent: integer("coverage_percent").notNull(),
+});
+
 // Carrier intelligence adopted from the prototype: approval and denial rates,
 // processing time, common denial reasons, and the documentation a carrier wants.
 export const carrierPatterns = pgTable("carrier_patterns", {
