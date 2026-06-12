@@ -2,10 +2,10 @@ import type { Express } from "express";
 import crypto from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { requireAuth } from "../auth";
+import { requireAuth, requireRole } from "../auth";
 import { audit } from "../audit";
 import { now } from "../clock";
-import { claims, invoices, invoiceItems, payments, patients, visits } from "../../shared/schema";
+import { claims, invoices, invoiceItems, payments, patients, visits, paymentBatches } from "../../shared/schema";
 
 // RCM lite. Eligibility, claims from draft to paid with auto posted ERAs,
 // statements, patient payments, and pay by text, all on a mock gateway and a
@@ -35,6 +35,59 @@ export function registerBillingRoutes(app: Express) {
     const pIn = new Set(pts.map((p) => p.id));
     const pName = new Map(pts.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
     res.json({ claims: rows.filter((c) => pIn.has(c.patientId)).map((c) => ({ ...c, patientName: pName.get(c.patientId) })) });
+  });
+
+  // Claims a bulk payment can be applied to: submitted or accepted, not yet paid.
+  app.get("/api/claims/payable", requireAuth, async (req, res) => {
+    const scope = req.user!.clinicIds;
+    const carrier = req.query.carrier ? String(req.query.carrier) : null;
+    const rows = await db.select().from(claims).where(inArray(claims.status, ["submitted", "accepted"]));
+    const pts = await db.select().from(patients).where(inArray(patients.clinicId, scope));
+    const pName = new Map(pts.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+    const inScope = new Set(pts.map((p) => p.id));
+    res.json({
+      claims: rows
+        .filter((c) => inScope.has(c.patientId) && (!carrier || c.carrier === carrier))
+        .map((c) => {
+          const elig = eligibilityFor(c.carrier);
+          const insuranceCents = Math.round((c.totalCents * elig.coveragePercent) / 100);
+          return { id: c.id, patientName: pName.get(c.patientId), carrier: c.carrier, totalCents: c.totalCents, insuranceCents };
+        }),
+    });
+  });
+
+  // Post a bulk insurance payment across the selected claims at once.
+  app.post("/api/payment-batches", requireAuth, requireRole("office_manager", "practice_owner", "admin"), async (req, res) => {
+    const scope = req.user!.clinicIds;
+    const { name, carrier, method, checkNumber, claimIds } = req.body ?? {};
+    const ids: number[] = Array.isArray(claimIds) ? claimIds.map(Number) : [];
+    if (!name || ids.length === 0) return res.status(400).json({ error: "A name and at least one claim are required" });
+
+    const clinicId = scope[0];
+    const [batch] = await db.insert(paymentBatches).values({ clinicId, name, carrier: carrier ?? null, method: method ?? "eft", checkNumber: checkNumber ?? null, paymentDate: now(), createdBy: req.user!.id }).returning();
+
+    let total = 0, applied = 0;
+    for (const id of ids) {
+      const claim = await db.query.claims.findFirst({ where: eq(claims.id, id) });
+      if (!claim) continue;
+      const patient = await db.query.patients.findFirst({ where: eq(patients.id, claim.patientId) });
+      if (!patient || !scope.includes(patient.clinicId)) continue;
+      const elig = eligibilityFor(claim.carrier);
+      const insurancePaid = Math.round((claim.totalCents * elig.coveragePercent) / 100);
+      const patientPortion = claim.totalCents - insurancePaid;
+      await db.update(claims).set({ status: "paid", paidCents: insurancePaid, resolvedAt: now() }).where(eq(claims.id, id));
+      await db.insert(payments).values({ patientId: claim.patientId, invoiceId: claim.invoiceId, amountCents: insurancePaid, method: "insurance", reference: `${name}${checkNumber ? ` #${checkNumber}` : ""}`, batchId: batch.id });
+      await db.update(patients).set({ balanceCents: (patient.balanceCents ?? 0) + patientPortion }).where(eq(patients.id, patient.id));
+      total += insurancePaid; applied++;
+    }
+    await db.update(paymentBatches).set({ amountCents: total, claimCount: applied }).where(eq(paymentBatches.id, batch.id));
+    await audit(req, { action: "bulk_insurance_payment", entityType: "payment_batch", entityId: batch.id, clinicId, detail: { applied, total } });
+    res.json({ batchId: batch.id, applied, totalCents: total });
+  });
+
+  app.get("/api/payment-batches", requireAuth, async (req, res) => {
+    const rows = await db.select().from(paymentBatches).where(inArray(paymentBatches.clinicId, req.user!.clinicIds)).orderBy(desc(paymentBatches.createdAt)).limit(20);
+    res.json({ batches: rows });
   });
 
   // Simulated eligibility check, with a little latency.

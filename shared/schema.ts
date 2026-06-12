@@ -464,6 +464,22 @@ export const payments = pgTable("payments", {
   amountCents: integer("amount_cents").notNull(),
   method: text("method").notNull().default("card"),
   reference: text("reference"),
+  batchId: integer("batch_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// A bulk insurance payment: one payer remittance applied across many claims.
+export const paymentBatches = pgTable("payment_batches", {
+  id: serial("id").primaryKey(),
+  clinicId: integer("clinic_id").notNull().references(() => clinics.id),
+  name: text("name").notNull(),
+  carrier: text("carrier"),
+  method: text("method").notNull().default("eft"),
+  checkNumber: text("check_number"),
+  paymentDate: timestamp("payment_date").notNull().defaultNow(),
+  amountCents: integer("amount_cents").notNull().default(0),
+  claimCount: integer("claim_count").notNull().default(0),
+  createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

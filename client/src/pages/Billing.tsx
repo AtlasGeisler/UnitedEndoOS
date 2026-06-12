@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CreditCard, Send, CheckCircle2, ShieldCheck, RefreshCw, X, Search } from "lucide-react";
+import { CreditCard, Send, CheckCircle2, ShieldCheck, RefreshCw, X, Search, Layers } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ export function Billing() {
   const { data } = useQuery({ queryKey: ["/api/claims"], queryFn: () => apiRequest<{ claims: Claim[] }>("GET", "/api/claims") });
   const claims = data?.claims ?? [];
   const [toast, setToast] = useState<string | null>(null);
+  const [bulk, setBulk] = useState(false);
 
   const act = useMutation({
     mutationFn: (v: { id: number; action: string }) => apiRequest(`POST`, `/api/claims/${v.id}/${v.action}`),
@@ -30,7 +31,10 @@ export function Billing() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-hairline px-7 py-4"><h1 className="text-[18px] font-semibold">Billing</h1></div>
+      <div className="flex items-center gap-3 border-b border-hairline px-7 py-4">
+        <h1 className="text-[18px] font-semibold">Billing</h1>
+        <Button size="sm" className="ml-auto" onClick={() => setBulk(true)}><Layers className="h-4 w-4" /> Bulk insurance payment</Button>
+      </div>
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-4xl">
           <div className="mb-5 grid gap-4 sm:grid-cols-3">
@@ -78,6 +82,68 @@ export function Billing() {
           </div>
 
           <PaymentTracer />
+        </div>
+      </div>
+      {bulk && <BulkPaymentDialog onClose={() => setBulk(false)} onDone={(n, t) => { setBulk(false); setToast(`Bulk payment posted: ${n} claims, ${money(t)} applied.`); queryClient.invalidateQueries({ queryKey: ["/api/claims"] }); }} />}
+    </div>
+  );
+}
+
+interface PayableClaim { id: number; patientName: string; carrier: string | null; totalCents: number; insuranceCents: number }
+
+// Bulk insurance payment: name a batch, set method and check number, select the
+// payable claims it covers, and post them all at once.
+function BulkPaymentDialog({ onClose, onDone }: { onClose: () => void; onDone: (count: number, totalCents: number) => void }) {
+  const [name, setName] = useState("");
+  const [method, setMethod] = useState("eft");
+  const [checkNumber, setCheckNumber] = useState("");
+  const [carrier, setCarrier] = useState("");
+  const [sel, setSel] = useState<Record<number, boolean>>({});
+  const payable = useQuery({ queryKey: ["/api/claims/payable", carrier], queryFn: () => apiRequest<{ claims: PayableClaim[] }>("GET", `/api/claims/payable${carrier ? `?carrier=${encodeURIComponent(carrier)}` : ""}`) });
+  const list = payable.data?.claims ?? [];
+  const carriers = [...new Set(list.map((c) => c.carrier).filter(Boolean))] as string[];
+  const chosen = list.filter((c) => sel[c.id]);
+  const total = chosen.reduce((m, c) => m + c.insuranceCents, 0);
+
+  const post = useMutation({
+    mutationFn: () => apiRequest<{ applied: number; totalCents: number }>("POST", "/api/payment-batches", { name, method, checkNumber, carrier: carrier || null, claimIds: chosen.map((c) => c.id) }),
+    onSuccess: (r) => onDone(r.applied, r.totalCents),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl border border-hairline bg-surface p-5 shadow-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center gap-2">
+          <Layers className="h-4 w-4 text-endo" />
+          <h2 className="text-[15px] font-semibold">Bulk insurance payment</h2>
+          <button onClick={onClose} className="ml-auto text-content-soft hover:text-content"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Batch name" className="rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-sage" />
+          <select value={carrier} onChange={(e) => { setCarrier(e.target.value); setSel({}); }} className="rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1.5 text-[12px] outline-none"><option value="">All carriers</option>{carriers.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+          <select value={method} onChange={(e) => setMethod(e.target.value)} className="rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1.5 text-[12px] outline-none"><option value="eft">EFT</option><option value="check">Check</option></select>
+          <input value={checkNumber} onChange={(e) => setCheckNumber(e.target.value)} placeholder="Check / EFT #" className="rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1.5 text-[12px] outline-none" />
+        </div>
+        <div className="max-h-72 overflow-y-auto rounded-lg border border-hairline">
+          <table className="w-full text-[12px]">
+            <thead><tr className="border-b border-hairline text-left text-[10px] uppercase text-content-soft"><th className="px-2 py-1"><input type="checkbox" checked={list.length > 0 && chosen.length === list.length} onChange={(e) => setSel(e.target.checked ? Object.fromEntries(list.map((c) => [c.id, true])) : {})} className="accent-endo" /></th><th className="px-2 py-1">Patient</th><th className="px-2 py-1">Carrier</th><th className="px-2 py-1 text-right">Total</th><th className="px-2 py-1 text-right">Insurance</th></tr></thead>
+            <tbody>
+              {list.map((c) => (
+                <tr key={c.id} className="border-b border-hairline last:border-0">
+                  <td className="px-2 py-1.5"><input type="checkbox" checked={!!sel[c.id]} onChange={(e) => setSel({ ...sel, [c.id]: e.target.checked })} className="accent-endo" /></td>
+                  <td className="px-2 py-1.5 font-medium">{c.patientName}</td>
+                  <td className="px-2 py-1.5 text-content-soft">{c.carrier}</td>
+                  <td className="px-2 py-1.5 text-right tnum text-content-soft">{money(c.totalCents)}</td>
+                  <td className="px-2 py-1.5 text-right tnum">{money(c.insuranceCents)}</td>
+                </tr>
+              ))}
+              {list.length === 0 && <tr><td colSpan={5} className="px-2 py-4 text-center text-content-soft">No payable claims.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <div className="text-[13px] text-content-soft">{chosen.length} selected, total <span className="font-semibold text-content tnum">{money(total)}</span></div>
+          <Button className="ml-auto" disabled={!name || chosen.length === 0 || post.isPending} onClick={() => post.mutate()}><CheckCircle2 className="h-4 w-4" /> {post.isPending ? "Posting..." : "Post bulk payment"}</Button>
         </div>
       </div>
     </div>
