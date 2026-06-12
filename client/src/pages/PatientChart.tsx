@@ -198,7 +198,7 @@ export function PatientChart() {
         {tab === "Overview" && <Overview detail={detail.data} studies={studies} visits={visits} patientId={id} onOpenVisit={(vid) => navigate(`/visits/${vid}`)} />}
         {tab === "Visits" && <Visits visits={visits} onOpenVisit={(vid) => navigate(`/visits/${vid}`)} />}
         {tab === "Plans" && <PlaceholderPage icon={ClipboardSignature} title="Treatment Plans" blurb="Multi option plans with insurance estimates and canvas e-signature capture." phase="Phase 4" />}
-        {tab === "Billing" && <PlaceholderPage icon={CreditCard} title="Billing" blurb="Claims, eligibility, statements, and payment plans for this patient." phase="Phase 5" />}
+        {tab === "Billing" && <PatientBilling patientId={id} />}
         {tab === "Documents" && <PlaceholderPage icon={FileText} title="Documents" blurb="Scanned forms, consents, and signed plan snapshots." phase="Phase 4" />}
         {tab === "Messages" && <PlaceholderPage icon={MessageSquare} title="Messages" blurb="Two way patient texting and secure messages." phase="Phase 5" />}
       </div>
@@ -289,6 +289,52 @@ function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail:
           ))}
           {visits.length === 0 && <div className="text-[13px] text-content-soft">No visits recorded.</div>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface PaymentRow { id: number; amountCents: number; method: string; reference: string | null; createdAt: string }
+
+// The patient billing tab: balance, recent payments, and a daily receipt of the
+// transactions posted on a chosen day, downloadable.
+function PatientBilling({ patientId }: { patientId: number }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const statement = useQuery({ queryKey: ["/api/patients", patientId, "statement"], queryFn: () => apiRequest<{ balanceCents: number; payments: PaymentRow[] }>("GET", `/api/patients/${patientId}/statement`) });
+  const receipt = useQuery({ queryKey: ["/api/patients", patientId, "receipt", date], queryFn: () => apiRequest<{ items: PaymentRow[]; totalCents: number; balanceCents: number }>("GET", `/api/patients/${patientId}/receipt?date=${date}`) });
+
+  return (
+    <div className="h-full overflow-y-auto p-6">
+      <div className="mx-auto grid max-w-3xl gap-4 lg:grid-cols-2">
+        <Card icon={CreditCard} title="Account">
+          <div className="text-[24px] font-semibold tnum">${((statement.data?.balanceCents ?? 0) / 100).toFixed(2)}</div>
+          <div className="text-[12px] text-content-soft">current balance</div>
+          <div className="mt-3 text-[12px] font-semibold text-content-soft">Recent payments</div>
+          {(statement.data?.payments ?? []).slice(0, 6).map((p) => (
+            <div key={p.id} className="flex items-center gap-2 border-b border-hairline py-1.5 text-[12px] last:border-0">
+              <span className="capitalize">{p.method}</span>
+              <span className="truncate text-content-soft">{p.reference}</span>
+              <span className="ml-auto tnum">${(p.amountCents / 100).toFixed(2)}</span>
+            </div>
+          ))}
+          {(statement.data?.payments ?? []).length === 0 && <div className="text-[12px] text-content-soft">No payments yet.</div>}
+        </Card>
+
+        <Card icon={FileText} title="Daily receipt">
+          <div className="mb-2 flex items-center gap-2">
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1 text-[12px] outline-none" />
+            <a href={`/api/patients/${patientId}/receipt?date=${date}&format=txt`} className="ml-auto inline-flex items-center gap-1 rounded-md bg-endo px-2.5 py-1 text-[12px] font-medium text-white">Print receipt</a>
+          </div>
+          <div className="rounded-lg bg-[var(--surface-2)] p-3 font-mono text-[11px]">
+            <div className="mb-1 font-semibold">Transactions posted {date}</div>
+            {(receipt.data?.items ?? []).map((p) => (
+              <div key={p.id} className="flex justify-between"><span>{p.method} {p.reference}</span><span>${(p.amountCents / 100).toFixed(2)}</span></div>
+            ))}
+            {(receipt.data?.items ?? []).length === 0 && <div className="text-content-soft">No transactions on this day.</div>}
+            <div className="mt-1 flex justify-between border-t border-hairline pt-1 font-semibold"><span>Total today</span><span>${((receipt.data?.totalCents ?? 0) / 100).toFixed(2)}</span></div>
+          </div>
+        </Card>
       </div>
     </div>
   );

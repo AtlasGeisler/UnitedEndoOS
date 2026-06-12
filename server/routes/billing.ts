@@ -122,6 +122,35 @@ export function registerBillingRoutes(app: Express) {
     res.json({ link: `/pay/${patient.id}?t=${token}`, sentTo: patient.phone, balanceCents: patient.balanceCents });
   });
 
+  // A daily receipt: every transaction posted for the patient on a given day,
+  // with the running total and the current balance. Downloadable as text.
+  app.get("/api/patients/:id/receipt", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const patient = await db.query.patients.findFirst({ where: eq(patients.id, id) });
+    if (!patient || !req.user!.clinicIds.includes(patient.clinicId)) return res.status(404).json({ error: "Not found" });
+    const dateStr = String(req.query.date ?? now().toISOString().slice(0, 10));
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    const dayEnd = new Date(`${dateStr}T23:59:59`);
+    const pays = await db.select().from(payments).where(eq(payments.patientId, id));
+    const items = pays.filter((p) => { const d = new Date(p.createdAt); return d >= dayStart && d <= dayEnd; });
+    const totalCents = items.reduce((m, p) => m + p.amountCents, 0);
+
+    if (req.query.format === "txt") {
+      const lines = [
+        "United Endodontics", `Receipt for ${patient.firstName} ${patient.lastName}`,
+        `Date: ${dateStr}`, "",
+        ...items.map((p) => `  ${p.method.padEnd(10)} ${p.reference ?? ""}  $${(p.amountCents / 100).toFixed(2)}`),
+        items.length ? "" : "  No transactions posted on this day.",
+        `Total posted today: $${(totalCents / 100).toFixed(2)}`,
+        `Account balance: $${((patient.balanceCents ?? 0) / 100).toFixed(2)}`,
+      ];
+      res.setHeader("Content-Type", "text/plain");
+      res.setHeader("Content-Disposition", `attachment; filename="receipt-${id}-${dateStr}.txt"`);
+      return res.send(lines.join("\n"));
+    }
+    res.json({ date: dateStr, items, totalCents, balanceCents: patient.balanceCents ?? 0 });
+  });
+
   // A patient statement: balance and the recent invoice lines.
   app.get("/api/patients/:id/statement", requireAuth, async (req, res) => {
     const id = Number(req.params.id);
