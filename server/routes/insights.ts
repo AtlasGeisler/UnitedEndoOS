@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql, gte, lte } from "drizzle-orm";
 import { db } from "../db";
 import { requireAuth } from "../auth";
 import { now } from "../clock";
@@ -124,6 +124,50 @@ export function registerInsightRoutes(app: Express) {
   app.get("/api/admin/ai-audit", requireAuth, async (_req, res) => {
     const rows = await db.select().from(aiAuditLogs).orderBy(desc(aiAuditLogs.createdAt)).limit(40);
     res.json({ logs: rows });
+  });
+
+  // Contact tracing: given an infected patient and a test date, find other
+  // patients whose appointments overlapped in time within the window of two days
+  // before to fourteen days after the test date, regardless of operatory.
+  app.post("/api/contact-trace", requireAuth, async (req, res) => {
+    const scope = req.user!.clinicIds;
+    const { lastName, dateOfBirth, testDate } = req.body ?? {};
+    if (!lastName || !testDate) return res.status(400).json({ error: "Patient last name and test date are required" });
+
+    const matches = await db.select().from(patients).where(and(inArray(patients.clinicId, scope), eq(patients.lastName, String(lastName))));
+    const infected = dateOfBirth ? matches.find((p) => p.dateOfBirth === dateOfBirth) : matches[0];
+    if (!infected) return res.status(404).json({ error: "Patient not found" });
+
+    const test = new Date(`${testDate}T00:00:00`);
+    const windowStart = new Date(test.getTime() - 2 * 86400000);
+    const windowEnd = new Date(test.getTime() + 14 * 86400000);
+
+    const inWindow = await db.select().from(appointments).where(and(
+      inArray(appointments.clinicId, scope), gte(appointments.startsAt, windowStart), lte(appointments.startsAt, windowEnd),
+    ));
+    const infectedAppts = inWindow.filter((a) => a.patientId === infected.id);
+
+    // An exposure is another patient's appointment that overlaps an infected
+    // appointment in time.
+    const overlap = (aS: Date, aE: Date, bS: Date, bE: Date) => aS < bE && bS < aE;
+    const exposedByPatient = new Map<number, { startsAt: Date }>();
+    for (const other of inWindow) {
+      if (!other.patientId || other.patientId === infected.id) continue;
+      const oS = new Date(other.startsAt), oE = new Date(other.endsAt);
+      const hit = infectedAppts.some((ia) => overlap(oS, oE, new Date(ia.startsAt), new Date(ia.endsAt)));
+      if (hit && !exposedByPatient.has(other.patientId)) exposedByPatient.set(other.patientId, { startsAt: oS });
+    }
+
+    const exposedIds = [...exposedByPatient.keys()];
+    const pts = exposedIds.length ? await db.select().from(patients).where(inArray(patients.id, exposedIds)) : [];
+    res.json({
+      infected: { name: `${infected.firstName} ${infected.lastName}`, appointmentsInWindow: infectedAppts.length },
+      window: { from: windowStart.toISOString().slice(0, 10), to: windowEnd.toISOString().slice(0, 10) },
+      exposed: pts.map((p) => ({
+        id: p.id, name: `${p.firstName} ${p.lastName}`, phone: p.phone, email: p.email,
+        overlappedAt: exposedByPatient.get(p.id)!.startsAt,
+      })),
+    });
   });
 
   // Insurance narratives: a 7 section pre-authorization or denial appeal, using
