@@ -44,13 +44,13 @@ export default {
       },
       fontFamily: {
         sans: [
+          "Inter",
           "-apple-system",
           "BlinkMacSystemFont",
           "SF Pro Text",
-          "Inter",
           "sans-serif",
         ],
-        serif: ["ui-serif", "New York", "Georgia", "serif"],
+        serif: ["Merriweather", "ui-serif", "New York", "Georgia", "serif"],
       },
       borderRadius: {
         card: "12px",

@@ -1,21 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /*
-  Clinic Glass semantic tokens. Light mode is a warm parchment canvas with white
-  cards and ink text. Dark mode is an ink canvas with forest-tinted panels and
-  parchment text. Both ship at parity. endo is the single accent.
+  Clinic Glass semantic tokens, tuned toward the United Endodontics prototype:
+  a clean near-white canvas with pure-white cards, Inter body text, and
+  Merriweather serif headings. Dark mode keeps the forest-tinted panels. Both
+  ship at parity. endo is the single accent.
 */
 :root {
-  --canvas: #f5f0e8;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  --font-serif: "Merriweather", ui-serif, "New York", Georgia, serif;
+  --canvas: #f8faf9;
   --surface: #ffffff;
-  --surface-2: #f7f8f6;
+  --surface-2: #f1f5f2;
   --hairline: rgba(26, 26, 26, 0.1);
   --content: #1a1a1a;
   --content-soft: #5c6557;
   --accent: #3a7d44;
-  --glass: rgba(255, 255, 255, 0.72);
+  --glass: rgba(255, 255, 255, 0.85);
   color-scheme: light;
 }
 
@@ -45,10 +50,18 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--content);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Serif page titles, the prototype's editorial signature. Applies to the
+   semantic page headings; dense inline labels use divs and stay sans. */
+h1,
+h2 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
 }
 
 /* Tabular numerals everywhere numbers line up in columns. */
