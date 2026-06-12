@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CreditCard, Send, CheckCircle2, ShieldCheck, MessageSquareText } from "lucide-react";
+import { CreditCard, Send, CheckCircle2, ShieldCheck, RefreshCw, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface Claim { id: number; patientId: number; patientName: string; carrier: string | null; totalCents: number; paidCents: number; status: string }
+interface Claim { id: number; patientId: number; patientName: string; carrier: string | null; totalCents: number; paidCents: number; status: string; preAuthNumber: string | null; submissionCount: number }
 
 const money = (c: number) => `$${(c / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const STATUS_TONE: Record<string, string> = {
@@ -60,12 +60,16 @@ export function Billing() {
                     <td className="px-4 py-2 text-content-soft">{c.carrier}</td>
                     <td className="px-4 py-2 tnum">{money(c.totalCents)}</td>
                     <td className="px-4 py-2 tnum text-content-soft">{money(c.paidCents)}</td>
-                    <td className="px-4 py-2"><span className={cn("rounded-full px-2 py-0.5 text-[11px] capitalize", STATUS_TONE[c.status])}>{c.status}</span></td>
+                    <td className="px-4 py-2">
+                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] capitalize", STATUS_TONE[c.status])}>{c.status}</span>
+                      {c.preAuthNumber && <span className="ml-1 text-[10px] text-content-soft">PA {c.preAuthNumber}</span>}
+                      {c.submissionCount > 1 && <span className="ml-1 text-[10px] text-content-soft">x{c.submissionCount}</span>}
+                    </td>
                     <td className="px-4 py-2 text-right">
                       {c.status === "draft" && <Button size="sm" variant="outline" onClick={() => act.mutate({ id: c.id, action: "submit" })}><Send className="h-3.5 w-3.5" /> Submit</Button>}
                       {(c.status === "submitted" || c.status === "accepted") && <Button size="sm" onClick={() => act.mutate({ id: c.id, action: "post-era" })}><ShieldCheck className="h-3.5 w-3.5" /> Post ERA</Button>}
                       {c.status === "paid" && <span className="inline-flex items-center gap-1 text-[12px] text-endo"><CheckCircle2 className="h-3.5 w-3.5" /> Paid</span>}
-                      {c.status === "denied" && <PatientPay patientId={c.patientId} onToast={setToast} />}
+                      {c.status === "denied" && <div className="flex items-center justify-end gap-1.5"><ResubmitButton claimId={c.id} onDone={() => setToast("Claim resubmitted with the pre-authorization number.")} /><PatientPay patientId={c.patientId} onToast={setToast} /></div>}
                     </td>
                   </tr>
                 ))}
@@ -87,6 +91,24 @@ function PatientPay({ patientId, onToast }: { patientId: number; onToast: (s: st
   });
   if (bal <= 0) return <span className="text-[12px] text-content-soft">Balance clear</span>;
   return <Button size="sm" variant="outline" onClick={() => pay.mutate()}><CreditCard className="h-3.5 w-3.5" /> Collect ${(bal / 100).toFixed(0)}</Button>;
+}
+
+// Resubmit a denied claim with a pre-authorization number.
+function ResubmitButton({ claimId, onDone }: { claimId: number; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [pa, setPa] = useState("");
+  const resubmit = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/claims/${claimId}/resubmit`, { preAuthNumber: pa }),
+    onSuccess: () => { setOpen(false); setPa(""); queryClient.invalidateQueries({ queryKey: ["/api/claims"] }); onDone(); },
+  });
+  if (!open) return <Button size="sm" variant="outline" onClick={() => setOpen(true)}><RefreshCw className="h-3.5 w-3.5" /> Resubmit</Button>;
+  return (
+    <div className="flex items-center gap-1">
+      <input autoFocus value={pa} onChange={(e) => setPa(e.target.value)} placeholder="Pre-auth #" className="w-24 rounded-md border border-hairline bg-[var(--surface-2)] px-1.5 py-1 text-[11px] outline-none focus:ring-2 focus:ring-sage" />
+      <Button size="sm" onClick={() => resubmit.mutate()} disabled={resubmit.isPending}>Send</Button>
+      <button onClick={() => setOpen(false)} className="text-content-soft hover:text-content"><X className="h-3.5 w-3.5" /></button>
+    </div>
+  );
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {

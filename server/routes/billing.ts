@@ -65,8 +65,22 @@ export function registerBillingRoutes(app: Express) {
     const id = Number(req.params.id);
     const claim = await db.query.claims.findFirst({ where: eq(claims.id, id) });
     if (!claim) return res.status(404).json({ error: "Not found" });
-    const [row] = await db.update(claims).set({ status: "submitted", submittedAt: now() }).where(eq(claims.id, id)).returning();
+    const [row] = await db.update(claims).set({ status: "submitted", submittedAt: now(), submissionCount: (claim.submissionCount ?? 0) + 1 }).where(eq(claims.id, id)).returning();
     await audit(req, { action: "submit_claim", entityType: "claim", entityId: id });
+    res.json({ claim: row });
+  });
+
+  // Resubmit a denied claim with a pre-authorization number that rides on it.
+  app.post("/api/claims/:id/resubmit", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const claim = await db.query.claims.findFirst({ where: eq(claims.id, id) });
+    if (!claim) return res.status(404).json({ error: "Not found" });
+    const preAuthNumber = String(req.body?.preAuthNumber ?? "").trim() || null;
+    const [row] = await db.update(claims).set({
+      status: "submitted", preAuthNumber, submittedAt: now(), resolvedAt: null,
+      submissionCount: (claim.submissionCount ?? 0) + 1,
+    }).where(eq(claims.id, id)).returning();
+    await audit(req, { action: "resubmit_claim", entityType: "claim", entityId: id, detail: { preAuthNumber, attempt: row.submissionCount } });
     res.json({ claim: row });
   });
 
