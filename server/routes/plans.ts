@@ -36,6 +36,19 @@ export function registerPlanRoutes(app: Express) {
     res.json({ plan: row });
   });
 
+  // Update the plan's pre-authorization tracking.
+  app.patch("/api/plans/:id/preauth", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const plan = await db.query.treatmentPlans.findFirst({ where: eq(treatmentPlans.id, id) });
+    if (!plan) return res.status(404).json({ error: "Plan not found" });
+    const patient = await db.query.patients.findFirst({ where: eq(patients.id, plan.patientId) });
+    if (!patient || !req.user!.clinicIds.includes(patient.clinicId)) return res.status(404).json({ error: "Not found" });
+    const cur = (plan.preAuth as Record<string, unknown>) ?? {};
+    const [row] = await db.update(treatmentPlans).set({ preAuth: { ...cur, ...(req.body ?? {}) } }).where(eq(treatmentPlans.id, id)).returning();
+    await audit(req, { action: "update_plan_preauth", entityType: "treatment_plan", entityId: id, clinicId: patient.clinicId });
+    res.json({ plan: row });
+  });
+
   // Capture the e-signature and store a signed snapshot of the chosen option.
   app.post("/api/plans/:id/sign", requireAuth, async (req, res) => {
     const id = Number(req.params.id);

@@ -325,12 +325,26 @@ export const referralReports = pgTable("referral_reports", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// A plan's pre-authorization tracking, adopted from the EndoVision treatment plan
+// pre-estimate: status, the submitted/returned/approved dates, a denial code, the
+// pre-authorization number, and its expiration.
+export interface PreAuth {
+  status?: "None" | "Waiting" | "Approved" | "Rejected" | "Returned";
+  submittedDate?: string;
+  returnedDate?: string;
+  approvedDate?: string;
+  denialCode?: string;
+  preAuthNumber?: string;
+  expires?: string;
+}
+
 export const treatmentPlans = pgTable("treatment_plans", {
   id: serial("id").primaryKey(),
   patientId: integer("patient_id").notNull().references(() => patients.id),
   createdBy: integer("created_by").references(() => users.id),
   title: text("title").notNull(),
   options: jsonb("options"),
+  preAuth: jsonb("pre_auth").$type<PreAuth>(),
   status: text("status").notNull().default("proposed"),
   signedAt: timestamp("signed_at"),
   signaturePath: text("signature_path"),

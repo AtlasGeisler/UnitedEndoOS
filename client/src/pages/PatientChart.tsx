@@ -197,7 +197,7 @@ export function PatientChart() {
         )}
         {tab === "Overview" && <Overview detail={detail.data} studies={studies} visits={visits} patientId={id} onOpenVisit={(vid) => navigate(`/visits/${vid}`)} />}
         {tab === "Visits" && <Visits visits={visits} onOpenVisit={(vid) => navigate(`/visits/${vid}`)} />}
-        {tab === "Plans" && <PlaceholderPage icon={ClipboardSignature} title="Treatment Plans" blurb="Multi option plans with insurance estimates and canvas e-signature capture." phase="Phase 4" />}
+        {tab === "Plans" && <PatientPlans patientId={id} />}
         {tab === "Billing" && <PatientBilling patientId={id} />}
         {tab === "Documents" && <PlaceholderPage icon={FileText} title="Documents" blurb="Scanned forms, consents, and signed plan snapshots." phase="Phase 4" />}
         {tab === "Messages" && <PlaceholderPage icon={MessageSquare} title="Messages" blurb="Two way patient texting and secure messages." phase="Phase 5" />}
@@ -292,6 +292,58 @@ function Overview({ detail, studies, visits, patientId, onOpenVisit }: { detail:
       </div>
     </div>
   );
+}
+
+interface PreAuth { status?: string; submittedDate?: string; returnedDate?: string; approvedDate?: string; denialCode?: string; preAuthNumber?: string; expires?: string }
+interface PlanRow { id: number; title: string; status: string; signedAt: string | null; options: { name: string; chosen?: boolean }[] | null; preAuth: PreAuth | null }
+
+// The patient Plans tab: treatment plans with pre-authorization tracking
+// (status, dates, denial code, pre-auth number, expiration).
+function PatientPlans({ patientId }: { patientId: number }) {
+  const plans = useQuery({ queryKey: ["/api/patients", patientId, "plans"], queryFn: () => apiRequest<{ plans: PlanRow[] }>("GET", `/api/patients/${patientId}/plans`) });
+  const rows = plans.data?.plans ?? [];
+  if (rows.length === 0) return <div className="flex h-full items-center justify-center text-[13px] text-content-soft">No treatment plans yet. Create one from the Plans module.</div>;
+  return (
+    <div className="h-full overflow-y-auto p-6">
+      <div className="mx-auto max-w-3xl space-y-3">
+        {rows.map((p) => <PlanCard key={p.id} plan={p} />)}
+      </div>
+    </div>
+  );
+}
+
+const PA_STATUS = ["None", "Waiting", "Approved", "Rejected", "Returned"];
+function PlanCard({ plan }: { plan: PlanRow }) {
+  const [pa, setPa] = useState<PreAuth>(plan.preAuth ?? { status: "None" });
+  const save = useMutation({ mutationFn: (patch: PreAuth) => apiRequest("PATCH", `/api/plans/${plan.id}/preauth`, patch) });
+  const set = (patch: PreAuth) => { const next = { ...pa, ...patch }; setPa(next); save.mutate(patch); };
+  const chosen = plan.options?.find((o) => o.chosen) ?? plan.options?.[0];
+
+  return (
+    <div className="rounded-card border border-hairline bg-surface p-4 shadow-card">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[14px] font-semibold">{plan.title}</span>
+        {chosen && <span className="text-[12px] text-content-soft">{chosen.name}</span>}
+        <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[11px]", plan.signedAt ? "bg-complete/20 text-endo" : "bg-caution/20 text-caution")}>{plan.status}</span>
+      </div>
+      <div className="mt-3 rounded-lg bg-[var(--surface-2)] p-3">
+        <div className="mb-2 text-[12px] font-semibold text-content-soft">Pre-authorization</div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <PaField label="Status"><select value={pa.status ?? "None"} onChange={(e) => set({ status: e.target.value })} className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-[12px] outline-none">{PA_STATUS.map((s) => <option key={s}>{s}</option>)}</select></PaField>
+          <PaField label="Pre-auth #"><input value={pa.preAuthNumber ?? ""} onChange={(e) => setPa({ ...pa, preAuthNumber: e.target.value })} onBlur={(e) => save.mutate({ preAuthNumber: e.target.value })} className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-[12px] outline-none" /></PaField>
+          <PaField label="Submitted"><input type="date" value={pa.submittedDate ?? ""} onChange={(e) => set({ submittedDate: e.target.value })} className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-[12px] outline-none" /></PaField>
+          <PaField label="Returned"><input type="date" value={pa.returnedDate ?? ""} onChange={(e) => set({ returnedDate: e.target.value })} className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-[12px] outline-none" /></PaField>
+          <PaField label="Approved / rejected"><input type="date" value={pa.approvedDate ?? ""} onChange={(e) => set({ approvedDate: e.target.value })} className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-[12px] outline-none" /></PaField>
+          <PaField label="Expires"><input type="date" value={pa.expires ?? ""} onChange={(e) => set({ expires: e.target.value })} className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-[12px] outline-none" /></PaField>
+          {pa.status === "Rejected" && <PaField label="Denial code"><input value={pa.denialCode ?? ""} onChange={(e) => setPa({ ...pa, denialCode: e.target.value })} onBlur={(e) => save.mutate({ denialCode: e.target.value })} className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-[12px] outline-none" /></PaField>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaField({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="flex flex-col gap-0.5"><span className="text-[10px] uppercase tracking-wide text-content-soft">{label}</span>{children}</label>;
 }
 
 interface PaymentRow { id: number; amountCents: number; method: string; reference: string | null; createdAt: string }
