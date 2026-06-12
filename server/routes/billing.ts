@@ -210,6 +210,33 @@ export function registerBillingRoutes(app: Express) {
     });
   });
 
+  // The patient ledger: charge lines across the patient's invoices, for billing.
+  app.get("/api/patients/:id/ledger", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const patient = await db.query.patients.findFirst({ where: eq(patients.id, id) });
+    if (!patient || !req.user!.clinicIds.includes(patient.clinicId)) return res.status(404).json({ error: "Not found" });
+    const invs = await db.select().from(invoices).where(eq(invoices.patientId, id));
+    const items = invs.length ? await db.select().from(invoiceItems).where(inArray(invoiceItems.invoiceId, invs.map((i) => i.id))) : [];
+    res.json({ items: items.map((it) => ({ id: it.id, invoiceId: it.invoiceId, cdtCode: it.cdtCode, description: it.description, feeCents: it.feeCents })) });
+  });
+
+  // Create a single claim from selected ledger lines, transferring to insurance.
+  app.post("/api/claims/from-items", requireAuth, async (req, res) => {
+    const { patientId, itemIds } = req.body ?? {};
+    const patient = await db.query.patients.findFirst({ where: eq(patients.id, Number(patientId)) });
+    if (!patient || !req.user!.clinicIds.includes(patient.clinicId)) return res.status(404).json({ error: "Not found" });
+    const ids: number[] = Array.isArray(itemIds) ? itemIds.map(Number) : [];
+    if (ids.length === 0) return res.status(400).json({ error: "Select at least one charge" });
+    const items = await db.select().from(invoiceItems).where(inArray(invoiceItems.id, ids));
+    const totalCents = items.reduce((m, it) => m + it.feeCents, 0);
+    const [claim] = await db.insert(claims).values({
+      patientId: patient.id, invoiceId: items[0]?.invoiceId ?? null, carrier: patient.insuranceCarrier,
+      totalCents, status: "draft",
+    }).returning();
+    await audit(req, { action: "claim_from_ledger", entityType: "claim", entityId: claim.id, clinicId: patient.clinicId, detail: { lines: items.length, totalCents } });
+    res.json({ claim });
+  });
+
   // A daily receipt: every transaction posted for the patient on a given day,
   // with the running total and the current balance. Downloadable as text.
   app.get("/api/patients/:id/receipt", requireAuth, async (req, res) => {

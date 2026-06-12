@@ -350,14 +350,44 @@ interface PaymentRow { id: number; amountCents: number; method: string; referenc
 
 // The patient billing tab: balance, recent payments, and a daily receipt of the
 // transactions posted on a chosen day, downloadable.
+interface LedgerItem { id: number; cdtCode: string; description: string; feeCents: number }
+
 function PatientBilling({ patientId }: { patientId: number }) {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
+  const [sel, setSel] = useState<Record<number, boolean>>({});
   const statement = useQuery({ queryKey: ["/api/patients", patientId, "statement"], queryFn: () => apiRequest<{ balanceCents: number; payments: PaymentRow[] }>("GET", `/api/patients/${patientId}/statement`) });
   const receipt = useQuery({ queryKey: ["/api/patients", patientId, "receipt", date], queryFn: () => apiRequest<{ items: PaymentRow[]; totalCents: number; balanceCents: number }>("GET", `/api/patients/${patientId}/receipt?date=${date}`) });
+  const ledger = useQuery({ queryKey: ["/api/patients", patientId, "ledger"], queryFn: () => apiRequest<{ items: LedgerItem[] }>("GET", `/api/patients/${patientId}/ledger`) });
+  const items = ledger.data?.items ?? [];
+  const chosen = items.filter((it) => sel[it.id]);
+  const createClaim = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/claims/from-items", { patientId, itemIds: chosen.map((it) => it.id) }),
+    onSuccess: () => { setSel({}); queryClient.invalidateQueries({ queryKey: ["/api/claims"] }); },
+  });
 
   return (
     <div className="h-full overflow-y-auto p-6">
+      <div className="mx-auto mb-4 max-w-3xl rounded-card border border-hairline bg-surface p-4 shadow-card">
+        <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold"><FileText className="h-4 w-4 text-endo" /> Ledger
+          <Button size="sm" className="ml-auto" disabled={chosen.length === 0 || createClaim.isPending} onClick={() => createClaim.mutate()}>
+            Create claim from {chosen.length} selected
+          </Button>
+        </div>
+        <table className="w-full text-[12px]">
+          <tbody>
+            {items.map((it) => (
+              <tr key={it.id} className="border-b border-hairline last:border-0">
+                <td className="py-1.5 pr-2"><input type="checkbox" checked={!!sel[it.id]} onChange={(e) => setSel({ ...sel, [it.id]: e.target.checked })} className="accent-endo" /></td>
+                <td className="py-1.5 pr-2 font-medium">{it.cdtCode}</td>
+                <td className="py-1.5 pr-2 text-content-soft">{it.description}</td>
+                <td className="py-1.5 text-right tnum">${(it.feeCents / 100).toFixed(2)}</td>
+              </tr>
+            ))}
+            {items.length === 0 && <tr><td className="py-3 text-center text-content-soft" colSpan={4}>No charges on the ledger.</td></tr>}
+          </tbody>
+        </table>
+      </div>
       <div className="mx-auto grid max-w-3xl gap-4 lg:grid-cols-2">
         <Card icon={CreditCard} title="Account">
           <div className="text-[24px] font-semibold tnum">${((statement.data?.balanceCents ?? 0) / 100).toFixed(2)}</div>
