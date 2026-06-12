@@ -122,6 +122,41 @@ export function registerBillingRoutes(app: Express) {
     res.json({ link: `/pay/${patient.id}?t=${token}`, sentTo: patient.phone, balanceCents: patient.balanceCents });
   });
 
+  // Payment tracer: search payments by method, payor type, amount range, and
+  // date range, scoped to the user's clinics.
+  app.get("/api/payments/search", requireAuth, async (req, res) => {
+    const scope = req.user!.clinicIds;
+    const pts = await db.select().from(patients).where(inArray(patients.clinicId, scope));
+    const pName = new Map(pts.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+    const inScope = new Set(pts.map((p) => p.id));
+
+    const method = req.query.method ? String(req.query.method) : null;
+    const payor = req.query.payor ? String(req.query.payor) : null; // insurance | patient
+    const minCents = req.query.min ? Math.round(Number(req.query.min) * 100) : null;
+    const maxCents = req.query.max ? Math.round(Number(req.query.max) * 100) : null;
+    const from = req.query.from ? new Date(`${req.query.from}T00:00:00`) : null;
+    const to = req.query.to ? new Date(`${req.query.to}T23:59:59`) : null;
+
+    const rows = await db.select().from(payments).orderBy(desc(payments.createdAt)).limit(500);
+    const results = rows.filter((p) => {
+      if (!inScope.has(p.patientId)) return false;
+      if (method && p.method !== method) return false;
+      if (payor === "insurance" && p.method !== "insurance") return false;
+      if (payor === "patient" && p.method === "insurance") return false;
+      if (minCents != null && p.amountCents < minCents) return false;
+      if (maxCents != null && p.amountCents > maxCents) return false;
+      const d = new Date(p.createdAt);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    }).slice(0, 100);
+
+    res.json({
+      payments: results.map((p) => ({ id: p.id, patientName: pName.get(p.patientId), amountCents: p.amountCents, method: p.method, reference: p.reference, createdAt: p.createdAt })),
+      totalCents: results.reduce((m, p) => m + p.amountCents, 0),
+    });
+  });
+
   // A daily receipt: every transaction posted for the patient on a given day,
   // with the running total and the current balance. Downloadable as text.
   app.get("/api/patients/:id/receipt", requireAuth, async (req, res) => {

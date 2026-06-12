@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CreditCard, Send, CheckCircle2, ShieldCheck, RefreshCw, X } from "lucide-react";
+import { CreditCard, Send, CheckCircle2, ShieldCheck, RefreshCw, X, Search } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -76,6 +76,8 @@ export function Billing() {
               </tbody>
             </table>
           </div>
+
+          <PaymentTracer />
         </div>
       </div>
     </div>
@@ -91,6 +93,59 @@ function PatientPay({ patientId, onToast }: { patientId: number; onToast: (s: st
   });
   if (bal <= 0) return <span className="text-[12px] text-content-soft">Balance clear</span>;
   return <Button size="sm" variant="outline" onClick={() => pay.mutate()}><CreditCard className="h-3.5 w-3.5" /> Collect ${(bal / 100).toFixed(0)}</Button>;
+}
+
+interface FoundPayment { id: number; patientName: string; amountCents: number; method: string; reference: string | null; createdAt: string }
+
+// Payment tracer: search payments by method, payor, amount range, and dates.
+function PaymentTracer() {
+  const [f, setF] = useState({ method: "", payor: "", min: "", max: "", from: "", to: "" });
+  const [run, setRun] = useState(false);
+  const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]).toString();
+  const search = useQuery({
+    queryKey: ["/api/payments/search", q],
+    queryFn: () => apiRequest<{ payments: FoundPayment[]; totalCents: number }>("GET", `/api/payments/search?${q}`),
+    enabled: run,
+  });
+
+  return (
+    <div className="mt-6 rounded-card border border-hairline bg-surface p-4 shadow-card">
+      <div className="mb-3 flex items-center gap-2 text-[14px] font-semibold"><Search className="h-4 w-4 text-endo" /> Payment tracer</div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Method"><select value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })} className="w-28 rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1 text-[12px] outline-none"><option value="">Any</option><option value="card">Card</option><option value="check">Check</option><option value="eft">EFT</option><option value="cash">Cash</option><option value="insurance">Insurance</option></select></Field>
+        <Field label="Payor"><select value={f.payor} onChange={(e) => setF({ ...f, payor: e.target.value })} className="w-28 rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1 text-[12px] outline-none"><option value="">Any</option><option value="insurance">Insurance</option><option value="patient">Patient</option></select></Field>
+        <Field label="Min $"><input value={f.min} onChange={(e) => setF({ ...f, min: e.target.value })} className="w-20 rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1 text-[12px] tnum outline-none" /></Field>
+        <Field label="Max $"><input value={f.max} onChange={(e) => setF({ ...f, max: e.target.value })} className="w-20 rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1 text-[12px] tnum outline-none" /></Field>
+        <Field label="From"><input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className="rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1 text-[12px] outline-none" /></Field>
+        <Field label="To"><input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className="rounded-md border border-hairline bg-[var(--surface-2)] px-2 py-1 text-[12px] outline-none" /></Field>
+        <Button size="sm" onClick={() => { setRun(true); search.refetch(); }}><Search className="h-3.5 w-3.5" /> Search</Button>
+      </div>
+      {run && (
+        <div className="mt-3">
+          <div className="mb-1 text-[12px] text-content-soft">{search.data?.payments.length ?? 0} payments, total {money(search.data?.totalCents ?? 0)}</div>
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-hairline">
+            <table className="w-full text-[12px]">
+              <tbody>
+                {(search.data?.payments ?? []).map((p) => (
+                  <tr key={p.id} className="border-b border-hairline last:border-0">
+                    <td className="px-3 py-1.5 tnum text-content-soft">{new Date(p.createdAt).toLocaleDateString()}</td>
+                    <td className="px-3 py-1.5">{p.patientName}</td>
+                    <td className="px-3 py-1.5 capitalize text-content-soft">{p.method}</td>
+                    <td className="px-3 py-1.5 truncate text-content-soft">{p.reference}</td>
+                    <td className="px-3 py-1.5 text-right tnum">{money(p.amountCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="flex flex-col gap-0.5"><span className="text-[10px] uppercase tracking-wide text-content-soft">{label}</span>{children}</label>;
 }
 
 // Resubmit a denied claim with a pre-authorization number.
